@@ -1,6 +1,6 @@
 const { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const config = require('../config');
 
 const s3Client = new S3Client({
@@ -13,7 +13,7 @@ const s3Client = new S3Client({
 
 function buildResumeKey(userId, originalName = 'resume.pdf') {
   const extension = originalName.split('.').pop() || 'pdf';
-  return `resumes/${userId}/${Date.now()}-${uuidv4()}.${extension}`;
+  return `resumes/${userId}/${Date.now()}-${randomUUID()}.${extension}`;
 }
 
 async function uploadBuffer({ key, body, contentType }) {
