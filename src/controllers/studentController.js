@@ -101,6 +101,9 @@ const applyJob = catchAsync(async (req, res, next) => {
   if (!profile?.resumeKey) return next(new AppError('Upload a resume before applying', 400));
   const job = await Job.findOne({ jobId: req.body.jobId, status: 'OPEN' });
   if (!job) return next(new AppError('Job not found', 404));
+  if (typeof profile.cgpa !== 'number') {
+    return next(new AppError('Complete your profile CGPA before applying', 400));
+  }
   if (profile.cgpa < (job.minCgpa ?? 0)) return next(new AppError('Minimum CGPA not met', 400));
   const application = await Application.create({
     jobId: job._id,
@@ -146,7 +149,6 @@ const withdrawApplication = catchAsync(async (req, res, next) => {
 const deleteOwnApplication = catchAsync(async (req, res, next) => {
   const application = await Application.findOneAndDelete({ _id: req.params.id, studentId: req.user.id });
   if (!application) return next(new AppError('Application not found', 404));
-  await deleteObject(application.resumeKey);
   return sendMessage(res, 200, 'Application deleted successfully');
 });
 

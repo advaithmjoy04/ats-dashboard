@@ -1,5 +1,4 @@
 const mammoth = require('mammoth');
-const pdfParse = require('pdf-parse');
 
 const KNOWN_SKILLS = [
   'javascript',
@@ -48,10 +47,19 @@ function titleCase(value) {
     .join(' ');
 }
 
+async function extractPdfText(buffer) {
+  try {
+    const pdfParse = require('pdf-parse');
+    const data = await pdfParse(buffer);
+    return normalizeWhitespace(data.text);
+  } catch (error) {
+    return '';
+  }
+}
+
 async function extractResumeText(file) {
   if (file.mimetype === 'application/pdf') {
-    const data = await pdfParse(file.buffer);
-    return normalizeWhitespace(data.text);
+    return extractPdfText(file.buffer);
   }
 
   if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {

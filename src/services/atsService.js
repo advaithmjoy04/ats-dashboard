@@ -52,6 +52,68 @@ async function listAdminCandidates({ jobId, status, search, page, limit }) {
   if (status && APPLICATION_STATUSES.includes(status)) {
     query.status = status;
   }
+  if (jobId) {
+    const job = await Job.findOne({ jobId }).select('_id').lean();
+    if (!job) {
+      return {
+        items: [],
+        pagination: {
+          page: Math.max(Number(page) || 1, 1),
+          limit: Math.min(Math.max(Number(limit) || 10, 1), 100),
+          total: 0,
+          totalPages: 1,
+        },
+      };
+    }
+    query.jobId = job._id;
+  }
+
+  if (search) {
+    const searchRegex = new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const matchedProfiles = await StudentProfile.find({
+      $or: [
+        { fullName: searchRegex },
+        { usn: searchRegex },
+        { branch: searchRegex },
+        { skills: searchRegex },
+      ],
+    })
+      .select('userId')
+      .lean();
+    const matchedUsers = await User.find({
+      $or: [{ email: searchRegex }, { fullName: searchRegex }],
+    })
+      .select('_id')
+      .lean();
+    const matchedJobs = await Job.find({
+      $or: [{ title: searchRegex }, { role: searchRegex }, { companyName: searchRegex }],
+    })
+      .select('_id')
+      .lean();
+
+    const studentIds = new Set([
+      ...matchedProfiles.map((profile) => String(profile.userId)),
+      ...matchedUsers.map((user) => String(user._id)),
+    ]);
+    const jobIds = matchedJobs.map((job) => job._id);
+
+    query.$or = [
+      ...(studentIds.size ? [{ studentId: { $in: Array.from(studentIds) } }] : []),
+      ...(jobIds.length ? [{ jobId: { $in: jobIds } }] : []),
+    ];
+
+    if (!query.$or.length) {
+      return {
+        items: [],
+        pagination: {
+          page: Math.max(Number(page) || 1, 1),
+          limit: Math.min(Math.max(Number(limit) || 10, 1), 100),
+          total: 0,
+          totalPages: 1,
+        },
+      };
+    }
+  }
 
   const paginated = await paginate(Application, query, {
     page,
@@ -95,26 +157,8 @@ async function listAdminCandidates({ jobId, status, search, page, limit }) {
     })
   );
 
-  const filtered = mapped
-    .filter((item) => !jobId || item.job?.jobId === jobId)
-    .filter((item) => {
-      if (!search) return true;
-      const haystack = [
-        item.student.fullName,
-        item.student.email,
-        item.student.usn,
-        item.student.branch,
-        item.job?.role,
-        item.job?.companyName,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(String(search).toLowerCase());
-    });
-
   return {
-    items: filtered,
+    items: mapped,
     pagination: paginated.pagination,
   };
 }
