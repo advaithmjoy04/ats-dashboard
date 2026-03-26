@@ -28,9 +28,7 @@ studentProfileSchema.index(
   { usn: 1 },
   {
     unique: true,
-    partialFilterExpression: {
-      usn: { $exists: true, $type: 'string', $ne: '' },
-    },
+    sparse: true,
   }
 );
 

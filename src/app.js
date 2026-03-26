@@ -13,13 +13,30 @@ const { StudentProfile, User, Job, Application, EmailLog } = require('./models')
 
 const app = express();
 
+function isAllowedOrigin(origin) {
+  if (!origin) {
+    return true;
+  }
+
+  if (config.allowedOrigins.includes(origin)) {
+    return true;
+  }
+
+  try {
+    const { hostname, protocol } = new URL(origin);
+    return protocol === 'https:' && hostname.endsWith('.vercel.app');
+  } catch (error) {
+    return false;
+  }
+}
+
 app.set('trust proxy', 1);
 
 app.use(helmet());
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || config.allowedOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error('Not allowed by CORS'));
