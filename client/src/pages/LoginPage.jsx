@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../state/AuthContext';
 import { getHomeRoute } from '../utils/routing';
 
@@ -39,7 +39,7 @@ function LoginPage() {
               type="email"
               value={form.email}
               onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-              placeholder="admin@institution.edu"
+              placeholder="you@example.com"
               required
             />
           </label>
@@ -64,6 +64,11 @@ function LoginPage() {
             </div>
           </label>
           {error ? <div className="error-banner">{error}</div> : null}
+          <div className="auth-helper-row">
+            <Link to="/forgot-password" className="text-button auth-link">
+              Forgot password?
+            </Link>
+          </div>
           <button type="submit" className="primary-button" disabled={submitting}>
             {submitting ? 'Signing in...' : 'Sign in'}
           </button>

@@ -3,6 +3,7 @@ import api from '../api/client';
 
 function StudentProfilePage() {
   const [profile, setProfile] = useState(null);
+  const [selectedResume, setSelectedResume] = useState(null);
   const [form, setForm] = useState({
     fullName: '',
     branch: '',
@@ -20,7 +21,7 @@ function StudentProfilePage() {
 
   async function loadProfile() {
     try {
-      const response = await api.get('/student/profile');
+      const response = await api.get('/students/profile');
       const nextProfile = response.data;
       setProfile(nextProfile);
       setForm({
@@ -46,9 +47,42 @@ function StudentProfilePage() {
 
   const missingFields = useMemo(() => profile?.resumeExtractionMissingFields || [], [profile]);
 
-  async function handleUploadResume(event) {
+  function handleResumeSelection(event) {
     const file = event.target.files?.[0];
     if (!file) {
+      setSelectedResume(null);
+      return;
+    }
+
+    const allowedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setSelectedResume(null);
+      setMessage('');
+      setError('Please select a PDF or DOCX resume.');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setSelectedResume(null);
+      setMessage('');
+      setError('Resume must be 5 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+
+    setError('');
+    setSelectedResume(file);
+  }
+
+  async function handleUploadResume() {
+    const file = selectedResume;
+    if (!file) {
+      setError('Choose a resume file before uploading.');
       return;
     }
 
@@ -58,16 +92,16 @@ function StudentProfilePage() {
     try {
       const formData = new FormData();
       formData.append('resume', file);
-      await api.post('/student/resume', formData, {
+      await api.post('/students/resume', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setMessage('Resume uploaded. We extracted whatever details we could find from it.');
+      setMessage('Resume uploaded. We extracted whatever details we could find, and you can fill in anything missing below.');
+      setSelectedResume(null);
       await loadProfile();
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to upload resume.');
     } finally {
       setUploading(false);
-      event.target.value = '';
     }
   }
 
@@ -89,7 +123,7 @@ function StudentProfilePage() {
           .map((value) => value.trim())
           .filter(Boolean),
       };
-      const response = await api.put('/student/profile', payload);
+      const response = await api.put('/students/profile', payload);
       setProfile(response.data);
       setMessage('Profile updated successfully.');
     } catch (err) {
@@ -123,8 +157,15 @@ function StudentProfilePage() {
               </div>
             </div>
             <div className="resume-upload-card">
-              <input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleUploadResume} />
-              <p>{profile?.resumeOriginalName || 'No resume uploaded yet.'}</p>
+              <input
+                type="file"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={handleResumeSelection}
+              />
+              <p>{selectedResume ? `Selected: ${selectedResume.name}` : profile?.resumeOriginalName || 'No resume uploaded yet.'}</p>
+              <button type="button" className="primary-button" onClick={handleUploadResume} disabled={uploading || !selectedResume}>
+                {uploading ? 'Uploading...' : 'Upload Resume'}
+              </button>
               {profile?.resumeUrl ? (
                 <a href={profile.resumeUrl} target="_blank" rel="noreferrer" className="text-button">
                   View current resume

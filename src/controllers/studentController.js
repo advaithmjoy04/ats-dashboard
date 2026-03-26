@@ -34,15 +34,32 @@ const uploadResume = catchAsync(async (req, res, next) => {
   if (!req.file) return next(new AppError('Resume file required', 400));
   const profile = await StudentProfile.findOne({ userId: req.user.id });
   if (!profile) return next(new AppError('Profile not found', 404));
-  const resumeText = await extractResumeText(req.file);
-  const { extracted, missingFields } = extractResumeFields(resumeText);
+  let resumeText = '';
+  let extracted = {
+    branch: undefined,
+    cgpa: undefined,
+    phone: undefined,
+    educationDetails: undefined,
+    skills: [],
+  };
+  let missingFields = ['branch', 'cgpa', 'educationDetails', 'skills'];
+
+  try {
+    resumeText = await extractResumeText(req.file);
+    const extraction = extractResumeFields(resumeText);
+    extracted = extraction.extracted;
+    missingFields = extraction.missingFields;
+  } catch (error) {
+    // If parsing fails, still store the resume and let the student fill details manually.
+  }
+
   Object.assign(profile, await uploadResumeForStudent(req.user.id, req.file, profile.resumeKey), {
     branch: extracted.branch || profile.branch,
     cgpa: extracted.cgpa ?? profile.cgpa,
     phone: extracted.phone || profile.phone,
     educationDetails: extracted.educationDetails || profile.educationDetails,
     skills: extracted.skills.length ? extracted.skills : profile.skills,
-    resumeExtractedText: resumeText || profile.resumeExtractedText,
+    resumeExtractedText: resumeText || '',
     resumeExtractedAt: new Date(),
     resumeExtractionMissingFields: missingFields,
   });

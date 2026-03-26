@@ -12,7 +12,7 @@ function StudentApplicationsPage() {
 
     async function loadApplications() {
       try {
-        const response = await api.get('/student/applications/my', { params: { limit: 50 } });
+        const response = await api.get('/students/applications/my', { params: { limit: 50 } });
         if (!ignore) {
           setApplications(response.data.items || []);
           setError('');

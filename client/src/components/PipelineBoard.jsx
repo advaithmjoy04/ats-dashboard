@@ -8,13 +8,23 @@ const columns = [
   { key: 'SELECTED', label: 'Selected' },
 ];
 
-function PipelineBoard({ candidates }) {
+function PipelineBoard({ candidates, onMoveCandidate, updatingId }) {
   return (
     <div className="pipeline-board">
       {columns.map((column) => {
         const items = candidates.filter((candidate) => candidate.status === column.key);
         return (
-          <section className={`pipeline-column board-${column.key.toLowerCase()}`} key={column.key}>
+          <section
+            className={`pipeline-column board-${column.key.toLowerCase()}`}
+            key={column.key}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              const candidateId = event.dataTransfer.getData('text/plain');
+              if (candidateId) {
+                onMoveCandidate?.(candidateId, column.key);
+              }
+            }}
+          >
             <div className="pipeline-column-head">
               <span>{column.label}</span>
               <strong>{items.length}</strong>
@@ -22,7 +32,12 @@ function PipelineBoard({ candidates }) {
             <div className="pipeline-column-list">
               {items.length ? (
                 items.map((candidate) => (
-                  <article className="pipeline-card" key={candidate.id}>
+                  <article
+                    className={`pipeline-card ${updatingId === candidate.id ? 'is-updating' : ''}`}
+                    key={candidate.id}
+                    draggable={updatingId !== candidate.id}
+                    onDragStart={(event) => event.dataTransfer.setData('text/plain', candidate.id)}
+                  >
                     <div className="pipeline-card-head">
                       <div className="avatar-badge small">
                         {getInitials(candidate.student.fullName || candidate.student.email)}
@@ -34,8 +49,14 @@ function PipelineBoard({ candidates }) {
                       ) : null}
                     </div>
                     <strong>{candidate.student.fullName || candidate.student.email}</strong>
-                    <p>{candidate.student.branch || '--'} • Semester {candidate.student.semester ?? '--'}</p>
+                    <p>{candidate.student.branch || '--'} | Semester {candidate.student.semester ?? '--'}</p>
                     <span>CGPA {candidate.student.cgpa ?? '--'}</span>
+                    <span className="pipeline-skills">
+                      {candidate.student.skills?.length
+                        ? candidate.student.skills.slice(0, 4).join(', ')
+                        : 'Skills not available'}
+                    </span>
+                    {updatingId === candidate.id ? <span>Updating stage...</span> : null}
                   </article>
                 ))
               ) : (

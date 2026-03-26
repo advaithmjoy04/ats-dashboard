@@ -13,6 +13,7 @@ import AppShell from './components/AppShell';
 import ProtectedRoute from './components/ProtectedRoute';
 import CandidatesPage from './pages/CandidatesPage';
 import DashboardPage from './pages/DashboardPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import JobDetailPage from './pages/JobDetailPage';
 import JobsPage from './pages/JobsPage';
 import ActivationPage from './pages/ActivationPage';
@@ -22,6 +23,7 @@ import RecruiterCandidatesPage from './pages/RecruiterCandidatesPage';
 import RecruiterJobsPage from './pages/RecruiterJobsPage';
 import RecruiterProfilePage from './pages/RecruiterProfilePage';
 import RoleDashboardPage from './pages/RoleDashboardPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import StudentApplicationsPage from './pages/StudentApplicationsPage';
 import StudentJobsPage from './pages/StudentJobsPage';
 import StudentProfilePage from './pages/StudentProfilePage';
@@ -71,6 +73,8 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/activate" element={<ActivationPage />} />
       <Route
         path="/admin"

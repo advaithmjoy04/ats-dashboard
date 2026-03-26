@@ -9,6 +9,8 @@ function RecruiterCandidatesPage() {
   const [jobs, setJobs] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState('');
+  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const selectedJobId = params.get('jobId') || '';
 
@@ -17,12 +19,12 @@ function RecruiterCandidatesPage() {
 
     async function loadJobsAndCandidates() {
       try {
-        const jobsResponse = await api.get('/recruiter/jobs', { params: { limit: 50 } });
+        const jobsResponse = await api.get('/recruiters/jobs', { params: { limit: 50 } });
         const recruiterJobs = jobsResponse.data.items || [];
         const activeJobId = selectedJobId || recruiterJobs[0]?.jobId || '';
         let applicants = [];
         if (activeJobId) {
-          const candidatesResponse = await api.get(`/recruiter/jobs/${activeJobId}/applicants`, {
+          const candidatesResponse = await api.get(`/recruiters/jobs/${activeJobId}/applicants`, {
             params: { limit: 100 },
           });
           applicants = candidatesResponse.data.items || [];
@@ -73,6 +75,36 @@ function RecruiterCandidatesPage() {
     );
   }, [candidates, search]);
 
+  async function handleMoveCandidate(candidateId, nextStatus) {
+    const currentCandidate = candidates.find((candidate) => candidate.id === candidateId);
+    if (!currentCandidate || currentCandidate.status === nextStatus) {
+      return;
+    }
+
+    const previousCandidates = candidates;
+    setUpdatingId(candidateId);
+    setMessage('');
+    setError('');
+    setCandidates((current) =>
+      current.map((candidate) =>
+        candidate.id === candidateId ? { ...candidate, status: nextStatus } : candidate
+      )
+    );
+
+    try {
+      await api.patch(`/recruiters/applications/${candidateId}`, {
+        status: nextStatus,
+        jobId: selectedJobId,
+      });
+      setMessage(`Moved ${currentCandidate.student?.fullName || currentCandidate.student?.email} to ${nextStatus.toLowerCase()}.`);
+    } catch (err) {
+      setCandidates(previousCandidates);
+      setError(err.response?.data?.message || 'Unable to update candidate status.');
+    } finally {
+      setUpdatingId('');
+    }
+  }
+
   return (
     <div className="page-stack">
       <section className="toolbar">
@@ -92,11 +124,12 @@ function RecruiterCandidatesPage() {
         </div>
       </section>
 
+      {message ? <div className="success-banner">{message}</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
       {loading ? (
         <div className="screen-center">Loading candidates...</div>
       ) : selectedJobId ? (
-        <PipelineBoard candidates={filteredCandidates} />
+        <PipelineBoard candidates={filteredCandidates} onMoveCandidate={handleMoveCandidate} updatingId={updatingId} />
       ) : (
         <div className="empty-state">Assign a recruiter to a job first, then candidates will appear here.</div>
       )}

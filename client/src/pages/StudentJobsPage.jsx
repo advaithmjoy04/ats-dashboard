@@ -6,6 +6,7 @@ import { useOutletContext } from 'react-router-dom';
 function StudentJobsPage() {
   const { search } = useOutletContext();
   const [jobs, setJobs] = useState([]);
+  const [appliedJobIds, setAppliedJobIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -13,8 +14,16 @@ function StudentJobsPage() {
 
   async function loadJobs() {
     try {
-      const response = await api.get('/student/jobs', { params: { limit: 50 } });
-      setJobs(response.data.items || []);
+      const [jobsResponse, applicationsResponse] = await Promise.all([
+        api.get('/students/jobs', { params: { limit: 50 } }),
+        api.get('/students/applications/my', { params: { limit: 100 } }),
+      ]);
+      setJobs(jobsResponse.data.items || []);
+      setAppliedJobIds(
+        (applicationsResponse.data.items || [])
+          .map((application) => application.jobId?.jobId)
+          .filter(Boolean)
+      );
       setError('');
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to load open jobs.');
@@ -42,8 +51,9 @@ function StudentJobsPage() {
     setMessage('');
     setError('');
     try {
-      await api.post('/student/applications', { jobId: job.jobId });
+      await api.post('/students/applications', { jobId: job.jobId });
       setMessage(`Applied to ${job.companyName} - ${job.title || job.role}`);
+      setAppliedJobIds((current) => (current.includes(job.jobId) ? current : [...current, job.jobId]));
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to apply for this job.');
     } finally {
@@ -84,16 +94,28 @@ function StudentJobsPage() {
               </div>
               <p>{job.description}</p>
               <div className="job-foot">
-                <span className={`status-pill ${job.eligible ? 'status-selected' : 'status-rejected'}`}>
-                  {job.eligible ? 'Eligible' : 'Not Eligible'}
+                <span
+                  className={`status-pill ${
+                    appliedJobIds.includes(job.jobId)
+                      ? 'status-applied'
+                      : job.eligible
+                        ? 'status-selected'
+                        : 'status-rejected'
+                  }`}
+                >
+                  {appliedJobIds.includes(job.jobId) ? 'Applied' : job.eligible ? 'Eligible' : 'Not Eligible'}
                 </span>
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={!job.eligible || applyingJobId === job.jobId}
+                  disabled={!job.eligible || applyingJobId === job.jobId || appliedJobIds.includes(job.jobId)}
                   onClick={() => handleApply(job)}
                 >
-                  {applyingJobId === job.jobId ? 'Applying...' : 'Apply'}
+                  {appliedJobIds.includes(job.jobId)
+                    ? 'Applied'
+                    : applyingJobId === job.jobId
+                      ? 'Applying...'
+                      : 'Apply'}
                 </button>
               </div>
             </article>

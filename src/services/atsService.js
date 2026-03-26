@@ -86,6 +86,7 @@ async function listAdminCandidates({ jobId, status, search, page, limit }) {
           branch: profile?.branch || '',
           semester: profile?.semester,
           cgpa: profile?.cgpa,
+          skills: profile?.skills || [],
           resumeKey: profile?.resumeKey || application.resumeKey,
           resumeOriginalName: profile?.resumeOriginalName || application.resumeOriginalName,
           resumeUrl: profile?.resumeKey ? await getReadUrl(profile.resumeKey, 900) : null,

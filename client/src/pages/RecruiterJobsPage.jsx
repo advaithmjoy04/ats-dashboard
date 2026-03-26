@@ -14,7 +14,7 @@ function RecruiterJobsPage() {
 
     async function loadJobs() {
       try {
-        const response = await api.get('/recruiter/jobs', { params: { limit: 50 } });
+        const response = await api.get('/recruiters/jobs', { params: { limit: 50 } });
         if (!ignore) {
           setJobs(response.data.items || []);
           setError('');
