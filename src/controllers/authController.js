@@ -34,6 +34,10 @@ const login = catchAsync(async (req, res, next) => {
     return next(new AppError('Account locked. Try again later.', 423));
   }
 
+  if (typeof user.password !== 'string' || !user.password.startsWith('$2')) {
+    return next(new AppError('Stored password hash is invalid for this account. Reset or reseed the account password.', 500));
+  }
+
   const valid = await bcrypt.compare(password, user.password);
   if (!valid) {
     user.failedLoginAttempts += 1;
