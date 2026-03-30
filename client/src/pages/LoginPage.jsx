@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../state/AuthContext';
 import { getHomeRoute } from '../utils/routing';
@@ -7,10 +7,17 @@ function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const activationToken = params.get('activateToken');
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!activationToken) return;
+    navigate(`/activate?token=${encodeURIComponent(activationToken)}`, { replace: true });
+  }, [activationToken, navigate]);
 
   async function handleSubmit(event) {
     event.preventDefault();

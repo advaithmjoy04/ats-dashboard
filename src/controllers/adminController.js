@@ -62,7 +62,7 @@ async function createPendingUser({ email, fullName, role, profile }) {
     await sendAccountInvitation({
       email: normalizedEmail,
       fullName: fullName || normalizedEmail,
-      inviteLink: `${config.frontendOrigin}/activate?token=${plainToken}`,
+      inviteLink: `${config.frontendOrigin}/login?activateToken=${plainToken}`,
       loginLink: `${config.frontendOrigin}/login`,
     });
   } catch (error) {
