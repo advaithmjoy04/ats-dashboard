@@ -1,3 +1,5 @@
+import PopupShell from './PopupShell';
+
 function UserInvitePanel({
   title,
   description,
@@ -7,16 +9,12 @@ function UserInvitePanel({
   onSubmit,
   submitting,
   submitLabel,
+  open = true,
+  onClose,
 }) {
   return (
-    <section className="panel">
-      <div className="panel-heading">
-        <div>
-          <h2>{title}</h2>
-          <span>{description}</span>
-        </div>
-      </div>
-      <form className="job-form" onSubmit={onSubmit}>
+    <PopupShell open={open} onClose={onClose} title={title} subtitle={description} width="standard">
+      <form className="job-form popup-form-body" onSubmit={onSubmit}>
         {fields.map((field) => (
           <label key={field.name} className={field.fullWidth ? 'full-width' : ''}>
             {field.label}
@@ -37,7 +35,7 @@ function UserInvitePanel({
           {submitting ? 'Sending invite...' : submitLabel}
         </button>
       </form>
-    </section>
+    </PopupShell>
   );
 }
 

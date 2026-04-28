@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
+import { useTenant } from '../state/TenantContext';
+import { getTenantAwarePath } from '../utils/tenantRouting';
 
 function ResetPasswordPage() {
+  const { tenant } = useTenant();
+  const { tenantSlug } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const token = params.get('token') || '';
+  const tenantHint = tenantSlug || params.get('tenant') || tenant.slug || '';
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -25,12 +30,12 @@ function ResetPasswordPage() {
     setMessage('');
     setError('');
     try {
-      const response = await api.post('/auth/reset-password', { token, newPassword });
+      const response = await api.post('/auth/reset-password', { token, newPassword, tenant: tenantHint || undefined });
       setMessage(response.data || 'Password updated successfully.');
       setNewPassword('');
       setConfirmPassword('');
       setTimeout(() => {
-        navigate('/login', { replace: true });
+        navigate(tenantHint ? getTenantAwarePath(tenantHint, '/login') : '/login', { replace: true });
       }, 1200);
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to reset password.');
@@ -42,7 +47,7 @@ function ResetPasswordPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="brand-mark">ATS Dashboard</div>
+        <div className="brand-mark">{tenant.logoUrl ? <img src={tenant.logoUrl} alt={tenant.name} className="brand-logo" /> : tenant.name}</div>
         <h1>Reset Password</h1>
         <p>Create a new password for your account.</p>
         {!token ? <div className="error-banner">This password reset link is invalid or missing a token.</div> : null}
@@ -96,7 +101,7 @@ function ResetPasswordPage() {
           </button>
         </form>
         <p className="activation-footer">
-          Back to <Link to="/login">sign in</Link>
+          Back to <Link to={tenantHint ? getTenantAwarePath(tenantHint, '/login') : '/login'}>sign in</Link>
         </p>
       </div>
     </div>

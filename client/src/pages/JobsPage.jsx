@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import api from '../api/client';
 import CreateJobModal from '../components/CreateJobModal';
 import JobCard from '../components/JobCard';
 
 function JobsPage() {
+  const { search } = useOutletContext();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [recruiters, setRecruiters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +23,7 @@ function JobsPage() {
     try {
       const [jobsRes, recruitersRes] = await Promise.all([
         api.get('/admin/jobs'),
-        api.get('/admin/recruiters'),
+        api.get('/admin/recruiters', { params: { limit: 100 } }),
       ]);
       setJobs(jobsRes.data.items || []);
       setRecruiters(recruitersRes.data.items || []);
@@ -37,7 +40,25 @@ function JobsPage() {
   }, []);
 
   const filteredJobs = useMemo(() => {
+    const query = String(search || '').toLowerCase();
     const next = [...jobs].filter((job) => {
+      const matchesSearch = !query || [
+        job.jobId,
+        job.title,
+        job.role,
+        job.companyName,
+        job.client,
+        job.department,
+        ...(job.requiredSkills || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+
+      if (!matchesSearch) {
+        return false;
+      }
       if (statusFilter === 'ACTIVE') {
         return job.active;
       }
@@ -61,7 +82,7 @@ function JobsPage() {
     });
 
     return next;
-  }, [jobs, sortBy, statusFilter]);
+  }, [jobs, search, sortBy, statusFilter]);
 
   async function handleCreateJob(payload) {
     setCreating(true);
@@ -79,11 +100,15 @@ function JobsPage() {
   }
 
   async function handleDeleteJob(job) {
+    const passwordConfirmation = window.prompt(`Enter your admin password to delete ${job.companyName} - ${job.role}.`);
+    if (!passwordConfirmation) {
+      return;
+    }
     setDeletingJobId(job.jobId);
     setMessage('');
     setError('');
     try {
-      await api.delete(`/admin/jobs/${job.jobId}`);
+      await api.delete(`/admin/jobs/${job.jobId}`, { data: { passwordConfirmation } });
       setMessage(`Removed ${job.companyName} - ${job.role}`);
       await loadData();
     } catch (err) {
@@ -131,6 +156,8 @@ function JobsPage() {
               key={job._id}
               onDelete={handleDeleteJob}
               deleting={deletingJobId === job.jobId}
+              onOpen={(selectedJob) => navigate(`/admin/jobs/${selectedJob.jobId}`)}
+              footerNote="Open job management"
             />
           ))}
         </section>
@@ -140,10 +167,11 @@ function JobsPage() {
 
       <CreateJobModal
         open={modalOpen}
-        recruiters={recruiters}
         onClose={() => setModalOpen(false)}
         onSubmit={handleCreateJob}
         submitting={creating}
+        recruiters={recruiters}
+        allowRecruiterAssignments
       />
     </div>
   );

@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const config = require('../src/config');
 const { User } = require('../src/models');
+const { getDefaultTenantId } = require('../src/services/tenantService');
 
 async function main() {
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
@@ -11,10 +12,12 @@ async function main() {
   await mongoose.connect(config.mongoUri);
 
   const hashedPassword = await bcrypt.hash(password, 10);
+  const tenantId = await getDefaultTenantId();
 
   const user = await User.findOneAndUpdate(
     { email: email.toLowerCase() },
     {
+      tenantId,
       fullName,
       email: email.toLowerCase(),
       password: hashedPassword,

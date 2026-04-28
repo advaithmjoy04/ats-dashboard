@@ -1,3 +1,9 @@
 node_modules
 .env
 client/dist
+
+.vercel
+*.log
+.codex-deploy-temp/
+.env.production.local
+.env.vercel.production

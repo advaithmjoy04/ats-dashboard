@@ -6,8 +6,12 @@ const studentRoutes = require('./student');
 const recruiterRoutes = require('./recruiter');
 const jobRoutes = require('./jobs');
 const applicationRoutes = require('./applications');
+const tenantRoutes = require('./tenant');
+const platformAdminRoutes = require('./platformAdmin');
 
 router.use('/auth', authRoutes);
+router.use('/tenant', tenantRoutes);
+router.use('/platform', platformAdminRoutes);
 router.use('/admin', adminRoutes);
 router.use('/students', studentRoutes);
 router.use('/recruiters', recruiterRoutes);

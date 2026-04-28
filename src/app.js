@@ -3,45 +3,41 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
-const { StudentProfile, User, Job, Application, EmailLog } = require('./models');
+const tenantMiddleware = require('./middleware/tenant');
+const { originMatchesTenant } = require('./services/tenantService');
 
 const app = express();
-
-function isAllowedOrigin(origin) {
-  if (!origin) {
-    return true;
-  }
-
-  if (config.allowedOrigins.includes(origin)) {
-    return true;
-  }
-
-  try {
-    const { hostname, protocol } = new URL(origin);
-    return protocol === 'https:' && hostname.endsWith('.vercel.app');
-  } catch (error) {
-    return false;
-  }
-}
 
 app.set('trust proxy', 1);
 
 app.use(helmet());
+app.use(tenantMiddleware);
 app.use(
-  cors({
-    origin(origin, callback) {
-      if (isAllowedOrigin(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error('Not allowed by CORS'));
+  cors((req, callback) => {
+    return callback(null, {
+      origin(origin, done) {
+        if (!origin) {
+          return done(null, true);
+        }
+
+        if (originMatchesTenant(origin, req.tenant, {
+          frontendOrigin: config.frontendOrigin,
+          appBaseDomain: config.appBaseDomain,
+          nodeEnv: config.nodeEnv,
+        })) {
+          return done(null, true);
+        }
+
+        return done(new Error('Not allowed by CORS'));
+      },
+      credentials: true,
     },
-    credentials: true,
+    );
   })
 );
 app.use(express.json());
@@ -66,21 +62,5 @@ if (fs.existsSync(clientDistPath)) {
 }
 
 app.use(errorHandler);
-
-mongoose
-  .connect(config.mongoUri)
-  .then(async () => {
-    await Promise.all([
-      User.syncIndexes(),
-      StudentProfile.syncIndexes(),
-      Job.syncIndexes(),
-      Application.syncIndexes(),
-      EmailLog.syncIndexes(),
-    ]);
-  })
-  .catch((error) => {
-    console.error(error.message);
-    process.exit(1);
-  });
 
 module.exports = app;

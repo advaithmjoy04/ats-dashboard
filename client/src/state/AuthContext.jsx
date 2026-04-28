@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import api from '../api/client';
+import api, { TENANT_HINT_STORAGE_KEY } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -46,12 +46,26 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   async function login(credentials) {
+    if (credentials.scope === 'platform') {
+      localStorage.removeItem(TENANT_HINT_STORAGE_KEY);
+    } else if (credentials.tenant) {
+      localStorage.setItem(TENANT_HINT_STORAGE_KEY, credentials.tenant);
+    }
+
     const { data } = await api.post('/auth/login', credentials);
     localStorage.setItem('ats_token', data.accessToken);
     setToken(data.accessToken);
     const me = await api.get('/auth/me', {
       headers: { Authorization: `Bearer ${data.accessToken}` },
     });
+    setUser(me.data);
+    localStorage.setItem('ats_user_role', JSON.stringify(me.data.role));
+    return me.data;
+  }
+
+  async function forcePasswordChange(newPassword) {
+    await api.post('/auth/force-password-change', { newPassword });
+    const me = await api.get('/auth/me');
     setUser(me.data);
     localStorage.setItem('ats_user_role', JSON.stringify(me.data.role));
     return me.data;
@@ -65,7 +79,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ token, user, loading, login, logout }}>
+    <AuthContext.Provider value={{ token, user, loading, login, logout, forcePasswordChange }}>
       {children}
     </AuthContext.Provider>
   );

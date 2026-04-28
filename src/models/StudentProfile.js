@@ -3,6 +3,7 @@ const { Schema } = mongoose;
 
 const studentProfileSchema = new Schema(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', index: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
     fullName: { type: String, required: true },
     usn: { type: String, trim: true },
@@ -18,6 +19,7 @@ const studentProfileSchema = new Schema(
     resumeSize: { type: Number },
     resumeExtractedText: { type: String },
     resumeExtractedAt: { type: Date },
+    resumeTextDetected: { type: Boolean },
     resumeExtractionMissingFields: [{ type: String }],
     profileCompleted: { type: Boolean, default: false },
   },
@@ -31,5 +33,6 @@ studentProfileSchema.index(
     sparse: true,
   }
 );
+studentProfileSchema.index({ tenantId: 1, userId: 1 });
 
 module.exports = mongoose.model('StudentProfile', studentProfileSchema);

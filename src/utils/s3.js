@@ -16,6 +16,12 @@ function buildResumeKey(userId, originalName = 'resume.pdf') {
   return `resumes/${userId}/${Date.now()}-${randomUUID()}.${extension}`;
 }
 
+function buildTenantAssetKey(tenantId, assetType, originalName = 'asset.png') {
+  const normalizedType = assetType === 'favicon' ? 'favicon' : 'logo';
+  const extension = (originalName.split('.').pop() || 'png').toLowerCase();
+  return `tenant-assets/${tenantId}/${normalizedType}/${Date.now()}-${randomUUID()}.${extension}`;
+}
+
 async function uploadBuffer({ key, body, contentType }) {
   await s3Client.send(
     new PutObjectCommand({
@@ -39,6 +45,7 @@ async function deleteObject(key) {
 
 module.exports = {
   buildResumeKey,
+  buildTenantAssetKey,
   uploadBuffer,
   getReadUrl,
   deleteObject,

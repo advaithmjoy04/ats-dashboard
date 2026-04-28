@@ -46,6 +46,7 @@ function StudentProfilePage() {
   }, []);
 
   const missingFields = useMemo(() => profile?.resumeExtractionMissingFields || [], [profile]);
+  const resumeTextDetected = profile?.resumeTextDetected !== false;
 
   function handleResumeSelection(event) {
     const file = event.target.files?.[0];
@@ -92,10 +93,13 @@ function StudentProfilePage() {
     try {
       const formData = new FormData();
       formData.append('resume', file);
-      await api.post('/students/resume', formData, {
+      const response = await api.post('/students/resume', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setMessage('Resume uploaded. We extracted whatever details we could find, and you can fill in anything missing below.');
+      setMessage(
+        response.data?.extractionMessage ||
+          'Resume uploaded. We extracted whatever details we could find, and you can fill in anything missing below.'
+      );
       setSelectedResume(null);
       await loadProfile();
     } catch (err) {
@@ -173,7 +177,12 @@ function StudentProfilePage() {
               ) : null}
             </div>
             {uploading ? <div className="compact">Uploading and extracting your resume...</div> : null}
-            {missingFields.length ? (
+            {!resumeTextDetected && profile?.resumeKey ? (
+              <div className="error-banner">
+                We could not detect readable text in this resume. It may be a scanned or image-only PDF. Upload a text PDF/DOCX for better extraction, or fill the profile fields manually below.
+              </div>
+            ) : null}
+            {resumeTextDetected && missingFields.length ? (
               <div className="empty-state">
                 We could not confidently extract: {missingFields.join(', ')}. Please fill those below.
               </div>

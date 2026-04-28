@@ -21,6 +21,7 @@ function RecruitersPage() {
   const [removingId, setRemovingId] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   async function loadRecruiters() {
     setLoading(true);
@@ -53,6 +54,7 @@ function RecruitersPage() {
       await api.post('/admin/recruiters', form);
       setMessage(`Invitation email sent to ${form.email}`);
       setForm(initialForm);
+      setInviteOpen(false);
       await loadRecruiters();
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to invite recruiter.');
@@ -71,12 +73,16 @@ function RecruitersPage() {
     if (!confirmed) {
       return;
     }
+    const passwordConfirmation = window.prompt(`Enter your admin password to delete ${userName}.`);
+    if (!passwordConfirmation) {
+      return;
+    }
 
     setRemovingId(userId);
     setMessage('');
     setError('');
     try {
-      await api.delete(`/admin/users/${userId}`);
+      await api.delete(`/admin/users/${userId}`, { data: { passwordConfirmation } });
       setMessage(`Deleted ${recruiter.email}`);
       await loadRecruiters();
     } catch (err) {
@@ -93,37 +99,46 @@ function RecruitersPage() {
           <h2 className="page-title">Recruiters</h2>
           <p className="page-description">Invite recruiters and send them activation emails from the admin dashboard.</p>
         </div>
-        <div className="summary-pill">Invited Recruiters: {recruiters.length}</div>
+        <div className="toolbar-actions">
+          <div className="summary-pill">Invited Recruiters: {recruiters.length}</div>
+          <button type="button" className="primary-button" onClick={() => setInviteOpen(true)}>
+            Invite Recruiter
+          </button>
+        </div>
       </section>
 
       {message ? <div className="success-banner">{message}</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <div className="management-grid">
-        <UserInvitePanel
-          title="Invite Recruiter"
-          description="Create a recruiter account and send the activation email immediately."
-          fields={fields}
-          values={form}
-          onChange={handleChange}
-          onSubmit={handleSubmit}
-          submitting={submitting}
-          submitLabel="Send Recruiter Invite"
+      {loading ? (
+        <div className="screen-center">Loading invited recruiters...</div>
+      ) : (
+        <UserListPanel
+          title="Recruiter Invites"
+          description="Recently created recruiter accounts"
+          users={recruiters}
+          emptyMessage="No recruiters have been invited yet."
+          actionLabel="Remove"
+          onAction={handleRemove}
+          actionLoadingId={removingId}
         />
-        {loading ? (
-          <div className="screen-center">Loading invited recruiters...</div>
-        ) : (
-          <UserListPanel
-            title="Recruiter Invites"
-            description="Recently created recruiter accounts"
-            users={recruiters}
-            emptyMessage="No recruiters have been invited yet."
-            actionLabel="Remove"
-            onAction={handleRemove}
-            actionLoadingId={removingId}
-          />
-        )}
-      </div>
+      )}
+
+      <UserInvitePanel
+        open={inviteOpen}
+        onClose={() => {
+          setInviteOpen(false);
+          setForm(initialForm);
+        }}
+        title="Invite Recruiter"
+        description="Create a recruiter account and send the activation email immediately."
+        fields={fields}
+        values={form}
+        onChange={handleChange}
+        onSubmit={handleSubmit}
+        submitting={submitting}
+        submitLabel="Send Recruiter Invite"
+      />
     </div>
   );
 }

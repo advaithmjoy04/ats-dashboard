@@ -1,12 +1,18 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
+import { useTenant } from '../state/TenantContext';
+import { getTenantAwarePath } from '../utils/tenantRouting';
 
 function ForgotPasswordPage() {
+  const { tenant } = useTenant();
+  const { tenantSlug } = useParams();
+  const [params] = useSearchParams();
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const tenantHint = useMemo(() => tenantSlug || params.get('tenant') || tenant.slug || '', [tenantSlug, params, tenant.slug]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -14,7 +20,7 @@ function ForgotPasswordPage() {
     setMessage('');
     setError('');
     try {
-      const response = await api.post('/auth/forgot-password', { email });
+      const response = await api.post('/auth/forgot-password', { email, tenant: tenantHint || undefined });
       setMessage(response.data || 'If the email exists, a reset link has been sent.');
       setEmail('');
     } catch (err) {
@@ -27,7 +33,7 @@ function ForgotPasswordPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="brand-mark">ATS Dashboard</div>
+        <div className="brand-mark">{tenant.logoUrl ? <img src={tenant.logoUrl} alt={tenant.name} className="brand-logo" /> : tenant.name}</div>
         <h1>Forgot Password</h1>
         <p>Enter your email address and we will send you a password reset link.</p>
         {message ? <div className="success-banner">{message}</div> : null}
@@ -48,7 +54,7 @@ function ForgotPasswordPage() {
           </button>
         </form>
         <p className="activation-footer">
-          Remembered it? <Link to="/login">Back to sign in</Link>
+          Remembered it? <Link to={tenantHint ? getTenantAwarePath(tenantHint, '/login') : '/login'}>Back to sign in</Link>
         </p>
       </div>
     </div>

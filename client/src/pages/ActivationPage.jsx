@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
+import { useTenant } from '../state/TenantContext';
+import { getTenantAwarePath } from '../utils/tenantRouting';
 
 function ActivationPage() {
+  const { tenant } = useTenant();
+  const { tenantSlug } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const token = params.get('token') || '';
+  const tenantHint = tenantSlug || params.get('tenant') || tenant.slug || '';
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -13,6 +18,8 @@ function ActivationPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const passwordError = password && password.length < 8 ? 'Password must be at least 8 characters.' : '';
+  const confirmError = confirmPassword && password !== confirmPassword ? 'Passwords do not match.' : '';
 
   const canSubmit = useMemo(
     () => token && password.length >= 8 && password === confirmPassword,
@@ -25,12 +32,12 @@ function ActivationPage() {
     setMessage('');
     setError('');
     try {
-      const response = await api.post('/auth/activate', { token, password });
+      const response = await api.post('/auth/activate', { token, password, tenant: tenantHint || undefined });
       setMessage(response.data || 'Account activated successfully. You can sign in now.');
       setPassword('');
       setConfirmPassword('');
       setTimeout(() => {
-        navigate('/login', { replace: true });
+        navigate(tenantHint ? getTenantAwarePath(tenantHint, '/login') : '/login', { replace: true });
       }, 1200);
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to activate account.');
@@ -42,9 +49,9 @@ function ActivationPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="brand-mark">ATS Dashboard</div>
+        <div className="brand-mark">{tenant.logoUrl ? <img src={tenant.logoUrl} alt={tenant.name} className="brand-logo" /> : tenant.name}</div>
         <h1>Activate Account</h1>
-        <p>Set your password to activate your student or recruiter account.</p>
+        <p>Set your password to activate your account and sign in to the workspace.</p>
         {!token ? <div className="error-banner">This activation link is invalid or missing a token.</div> : null}
         {message ? <div className="success-banner">{message}</div> : null}
         {error ? <div className="error-banner">{error}</div> : null}
@@ -69,6 +76,7 @@ function ActivationPage() {
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
+            {passwordError ? <small className="field-error">{passwordError}</small> : null}
           </label>
           <label>
             Confirm password
@@ -90,13 +98,14 @@ function ActivationPage() {
                 {showConfirmPassword ? 'Hide' : 'Show'}
               </button>
             </div>
+            {confirmError ? <small className="field-error">{confirmError}</small> : null}
           </label>
           <button type="submit" className="primary-button" disabled={!canSubmit || submitting}>
             {submitting ? 'Activating...' : 'Activate Account'}
           </button>
         </form>
         <p className="activation-footer">
-          Already activated? <Link to="/login">Go to sign in</Link>
+          Already activated? <Link to={tenantHint ? getTenantAwarePath(tenantHint, '/login') : '/login'}>Go to sign in</Link>
         </p>
       </div>
     </div>

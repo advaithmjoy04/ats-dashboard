@@ -21,6 +21,7 @@ function StudentsPage() {
   const [removingId, setRemovingId] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   async function loadStudents() {
     setLoading(true);
@@ -53,6 +54,7 @@ function StudentsPage() {
       await api.post('/admin/students', form);
       setMessage(`Invitation email sent to ${form.email}`);
       setForm(initialForm);
+      setInviteOpen(false);
       await loadStudents();
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to invite student.');
@@ -71,12 +73,16 @@ function StudentsPage() {
     if (!confirmed) {
       return;
     }
+    const passwordConfirmation = window.prompt(`Enter your admin password to delete ${userName}.`);
+    if (!passwordConfirmation) {
+      return;
+    }
 
     setRemovingId(userId);
     setMessage('');
     setError('');
     try {
-      await api.delete(`/admin/users/${userId}`);
+      await api.delete(`/admin/users/${userId}`, { data: { passwordConfirmation } });
       setMessage(`Deleted ${student.userId?.email || 'student'}`);
       await loadStudents();
     } catch (err) {
@@ -93,38 +99,47 @@ function StudentsPage() {
           <h2 className="page-title">Students</h2>
           <p className="page-description">Invite students from the dashboard and send activation emails directly through Gmail.</p>
         </div>
-        <div className="summary-pill">Invited Students: {students.length}</div>
+        <div className="toolbar-actions">
+          <div className="summary-pill">Invited Students: {students.length}</div>
+          <button type="button" className="primary-button" onClick={() => setInviteOpen(true)}>
+            Invite Student
+          </button>
+        </div>
       </section>
 
       {message ? <div className="success-banner">{message}</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <div className="management-grid">
-        <UserInvitePanel
-          title="Invite Student"
-          description="Create a student account and send the activation email immediately."
-          fields={fields}
-          values={form}
-          onChange={handleChange}
-          onSubmit={handleSubmit}
-          submitting={submitting}
-          submitLabel="Send Student Invite"
+      {loading ? (
+        <div className="screen-center">Loading invited students...</div>
+      ) : (
+        <UserListPanel
+          title="Student Invites"
+          description="Recently created student accounts"
+          users={students}
+          emptyMessage="No students have been invited yet."
+          variant="student"
+          actionLabel="Remove"
+          onAction={handleRemove}
+          actionLoadingId={removingId}
         />
-        {loading ? (
-          <div className="screen-center">Loading invited students...</div>
-        ) : (
-          <UserListPanel
-            title="Student Invites"
-            description="Recently created student accounts"
-            users={students}
-            emptyMessage="No students have been invited yet."
-            variant="student"
-            actionLabel="Remove"
-            onAction={handleRemove}
-            actionLoadingId={removingId}
-          />
-        )}
-      </div>
+      )}
+
+      <UserInvitePanel
+        open={inviteOpen}
+        onClose={() => {
+          setInviteOpen(false);
+          setForm(initialForm);
+        }}
+        title="Invite Student"
+        description="Create a student account and send the activation email immediately."
+        fields={fields}
+        values={form}
+        onChange={handleChange}
+        onSubmit={handleSubmit}
+        submitting={submitting}
+        submitLabel="Send Student Invite"
+      />
     </div>
   );
 }
