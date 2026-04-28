@@ -11,11 +11,19 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_STORAGE_KEY);
   const tenantHint = localStorage.getItem(TENANT_HINT_STORAGE_KEY);
+  const storedRole = localStorage.getItem(ROLE_STORAGE_KEY);
+  const isPlatformPath =
+    typeof window !== 'undefined' &&
+    (window.location.pathname || '').startsWith('/platform');
+  const isPlatformRole = storedRole ? JSON.parse(storedRole) === 'PLATFORM_SUPER_ADMIN' : false;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   if (tenantHint) {
     config.headers['X-Tenant-Slug'] = tenantHint;
+  }
+  if (isPlatformPath || isPlatformRole) {
+    config.headers['X-Platform-Scope'] = 'true';
   }
   return config;
 });
