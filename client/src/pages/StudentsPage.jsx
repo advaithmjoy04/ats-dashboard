@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../api/client';
 import UserInvitePanel from '../components/UserInvitePanel';
 import UserListPanel from '../components/UserListPanel';
+import { emitActivityRefresh } from '../utils/activitySignals';
 
 const initialForm = {
   fullName: '',
@@ -56,6 +57,7 @@ function StudentsPage() {
       setForm(initialForm);
       setInviteOpen(false);
       await loadStudents();
+      emitActivityRefresh({ scope: 'admin', action: 'student.invited' });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to invite student.');
     } finally {
@@ -85,6 +87,7 @@ function StudentsPage() {
       await api.delete(`/admin/users/${userId}`, { data: { passwordConfirmation } });
       setMessage(`Deleted ${student.userId?.email || 'student'}`);
       await loadStudents();
+      emitActivityRefresh({ scope: 'admin', action: 'student.deleted', userId });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to remove student invite.');
     } finally {

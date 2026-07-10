@@ -9,6 +9,7 @@ const catchAsync = require('../utils/catchAsync');
 const { getRequestOrigin } = require('../utils/requestOrigin');
 const { sendData, sendMessage } = require('../utils/response');
 const { verifyPasswordConfirmation } = require('../utils/passwordConfirmation');
+const { assertValidPassword } = require('../utils/passwordValidation');
 const config = require('../config');
 
 function sanitizeOriginList(values = []) {
@@ -89,6 +90,7 @@ async function createTenantAdminAccount({
   }
 
   if (tempPassword) {
+    assertValidPassword(tempPassword, 'Temporary password');
     const admin = await User.create({
       tenantId: tenant._id,
       fullName: String(fullName || '').trim(),
@@ -185,6 +187,9 @@ const createTenant = catchAsync(async (req, res) => {
     if (usernameConflict) {
       throw new AppError('Admin username already exists', 409);
     }
+  }
+  if (adminPassword) {
+    assertValidPassword(adminPassword, 'Temporary password');
   }
 
   const tenant = await Tenant.create({

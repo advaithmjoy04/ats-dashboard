@@ -55,16 +55,16 @@ router.post(
   validate,
   createJob
 );
-router.get('/jobs', authenticateToken, requireRole('ADMIN'), listJobs);
+router.get('/jobs', authenticateToken, requireRole('ADMIN', 'PLATFORM_SUPER_ADMIN'), listJobs);
 router.delete('/jobs/:jobId', authenticateToken, requireRole('ADMIN'), body('passwordConfirmation').isString().notEmpty(), validate, deleteJob);
-router.get('/dashboard', authenticateToken, requireRole('ADMIN'), getDashboard);
-router.get('/recruiters', authenticateToken, requireRole('ADMIN'), listRecruiters);
-router.get('/students', authenticateToken, requireRole('ADMIN'), listStudents);
-router.get('/candidates', authenticateToken, requireRole('ADMIN'), listCandidates);
+router.get('/dashboard', authenticateToken, requireRole('ADMIN', 'PLATFORM_SUPER_ADMIN'), getDashboard);
+router.get('/recruiters', authenticateToken, requireRole('ADMIN', 'PLATFORM_SUPER_ADMIN'), listRecruiters);
+router.get('/students', authenticateToken, requireRole('ADMIN', 'PLATFORM_SUPER_ADMIN'), listStudents);
+router.get('/candidates', authenticateToken, requireRole('ADMIN', 'PLATFORM_SUPER_ADMIN'), listCandidates);
 router.patch(
   '/applications/:id/feedback',
   authenticateToken,
-  requireRole('ADMIN'),
+  requireRole('ADMIN', 'PLATFORM_SUPER_ADMIN'),
   body('summary').optional().isString(),
   body('notes').optional().isString(),
   body('rating').optional({ values: 'falsy' }).isInt({ min: 1, max: 5 }),

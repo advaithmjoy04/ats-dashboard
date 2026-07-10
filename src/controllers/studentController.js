@@ -1,16 +1,15 @@
 const { Application, Job, StudentProfile } = require('../models');
 const { sendApplicationConfirmation, paginate, uploadResumeForStudent, getResumeReadUrl, deleteObject } = require('../services');
 const { extractResumeFields, extractResumeText } = require('../services/resumeExtractionService');
-const { getDefaultTenantId } = require('../services/tenantService');
 const { buildResumeKey, uploadBuffer } = require('../utils/s3');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { getRequestOrigin } = require('../utils/requestOrigin');
 const { sendData, sendMessage } = require('../utils/response');
+const { getRequestTenantId } = require('../utils/tenantScope');
 const config = require('../config');
 const MIN_RESUME_TEXT_LENGTH = 80;
 const DEFAULT_STAGE = { stageKey: 'applied', label: 'Applied' };
-const UNSUPPORTED_STUDENT_FILE_MESSAGE = 'Custom file upload fields are not enabled yet for student applications.';
 
 function parsePayloadArray(value) {
   if (Array.isArray(value)) {
@@ -98,6 +97,26 @@ function getSubmittedFieldValue(submittedFields, fieldKey) {
   }
 
   return String(answer.value ?? '').trim();
+}
+
+function buildUploadedFileMap(req) {
+  const incomingFiles = Array.isArray(req.files)
+    ? req.files
+    : Array.isArray(req.file)
+      ? req.file
+      : req.file
+        ? [req.file]
+        : [];
+
+  return new Map(incomingFiles.map((file) => [file.fieldname, file]));
+}
+
+function buildApplicationFieldFileInputName(fieldKey) {
+  return `field_${fieldKey}`;
+}
+
+function buildScreeningFileInputName(questionId) {
+  return `screening_${questionId}`;
 }
 
 const getJobApplicationForm = catchAsync(async (req, res, next) => {
@@ -220,37 +239,44 @@ const getResumeUrl = catchAsync(async (req, res, next) => {
 });
 
 const listJobs = catchAsync(async (req, res) => {
-  const result = await paginate(Job, { tenantId: req.user.tenantId, status: 'OPEN' }, { page: req.query.page, limit: req.query.limit });
+  const query = { tenantId: req.user.tenantId, status: 'OPEN' };
+  const trimmedSearch = String(req.query.search || '').trim();
+  if (trimmedSearch) {
+    const searchRegex = new RegExp(trimmedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    query.$or = [
+      { title: searchRegex },
+      { role: searchRegex },
+      { companyName: searchRegex },
+      { jobId: searchRegex },
+    ];
+  }
+  const result = await paginate(Job, query, { page: req.query.page, limit: req.query.limit });
   return sendData(res, 200, result);
 });
 
 const applyJob = catchAsync(async (req, res, next) => {
-  const profile = await StudentProfile.findOne({ userId: req.user.id, tenantId: req.user.tenantId });
   const job = await Job.findOne({ tenantId: req.user.tenantId, jobId: req.body.jobId, status: 'OPEN' });
   if (!job) return next(new AppError('Job not found', 404));
+  const uploadedFileMap = buildUploadedFileMap(req);
   const submittedFields = sanitizeSubmittedFields(parsePayloadArray(req.body.submittedFields));
   const screeningAnswers = sanitizeScreeningAnswers(parsePayloadArray(req.body.screeningAnswers));
   const visibleFields = getVisibleApplicationFields(job);
   const mandatoryFields = visibleFields.filter((field) => field.mode === 'MANDATORY');
 
-  const hasUnsupportedFieldUpload = visibleFields.some((field) => field.key !== 'resume' && field.key && field.mode !== 'OFF' && field.type === 'FILE_UPLOAD');
-  if (hasUnsupportedFieldUpload) {
-    return next(new AppError(UNSUPPORTED_STUDENT_FILE_MESSAGE, 400));
-  }
-
-  const hasUnsupportedQuestionUpload = Array.isArray(job.screeningQuestions)
-    ? job.screeningQuestions.some((question) => question.type === 'FILE_UPLOAD')
-    : false;
-  if (hasUnsupportedQuestionUpload) {
-    return next(new AppError(UNSUPPORTED_STUDENT_FILE_MESSAGE, 400));
-  }
-
   for (const field of mandatoryFields) {
     const normalizedValue = getSubmittedFieldValue(submittedFields, field.key);
+    const fieldFile = uploadedFileMap.get(buildApplicationFieldFileInputName(field.key));
 
     if (field.key === 'resume') {
-      if (!req.file) {
+      if (!uploadedFileMap.get('resume')) {
         return next(new AppError('Upload a resume to apply for this job', 400));
+      }
+      continue;
+    }
+
+    if (field.type === 'FILE_UPLOAD') {
+      if (!fieldFile) {
+        return next(new AppError(`${field.label} is required for this application`, 400));
       }
       continue;
     }
@@ -265,6 +291,13 @@ const applyJob = catchAsync(async (req, res, next) => {
     : [];
   for (const question of requiredQuestions) {
     const answer = screeningAnswers.find((item) => item.questionId === question.questionId);
+    const questionFile = uploadedFileMap.get(buildScreeningFileInputName(question.questionId));
+    if (question.type === 'FILE_UPLOAD') {
+      if (!questionFile) {
+        return next(new AppError(`Answer required for: ${question.question}`, 400));
+      }
+      continue;
+    }
     const normalizedAnswer = Array.isArray(answer?.answer) ? answer.answer.join(' ').trim() : String(answer?.answer ?? '').trim();
     if (!normalizedAnswer) {
       return next(new AppError(`Answer required for: ${question.question}`, 400));
@@ -291,17 +324,18 @@ const applyJob = catchAsync(async (req, res, next) => {
   let resumeMimeType;
   let resumeSize;
   const uploadedArtifacts = [];
+  const resumeFile = uploadedFileMap.get('resume');
 
-  if (req.file) {
-    resumeKey = buildResumeKey(req.user.id, req.file.originalname);
+  if (resumeFile) {
+    resumeKey = buildResumeKey(req.user.id, resumeFile.originalname);
     await uploadBuffer({
       key: resumeKey,
-      body: req.file.buffer,
-      contentType: req.file.mimetype,
+      body: resumeFile.buffer,
+      contentType: resumeFile.mimetype,
     });
-    resumeOriginalName = req.file.originalname;
-    resumeMimeType = req.file.mimetype;
-    resumeSize = req.file.size;
+    resumeOriginalName = resumeFile.originalname;
+    resumeMimeType = resumeFile.mimetype;
+    resumeSize = resumeFile.size;
     uploadedArtifacts.push({
       fieldKey: 'resume',
       label: 'Resume',
@@ -312,8 +346,94 @@ const applyJob = catchAsync(async (req, res, next) => {
     });
   }
 
+  const normalizedSubmittedFields = visibleFields
+    .map((field) => {
+      const fieldFile = uploadedFileMap.get(buildApplicationFieldFileInputName(field.key));
+      const submittedField = submittedFields.find((item) => item.fieldKey === field.key);
+      if (field.key === 'resume') {
+        return {
+          fieldKey: field.key,
+          label: field.label,
+          type: field.type || 'FILE_UPLOAD',
+          value: resumeOriginalName || submittedField?.value || null,
+        };
+      }
+      if (field.type === 'FILE_UPLOAD') {
+        if (!fieldFile) {
+          return submittedField || null;
+        }
+        uploadedArtifacts.push({
+          fieldKey: field.key,
+          label: field.label,
+          fileKey: buildResumeKey(req.user.id, fieldFile.originalname),
+          originalName: fieldFile.originalname,
+          mimeType: fieldFile.mimetype,
+          size: fieldFile.size,
+        });
+        return {
+          fieldKey: field.key,
+          label: field.label,
+          type: field.type,
+          value: fieldFile.originalname,
+        };
+      }
+      return submittedField || {
+        fieldKey: field.key,
+        label: field.label,
+        type: field.type || 'TEXT',
+        value: null,
+      };
+    })
+    .filter(Boolean);
+
+  const normalizedScreeningAnswers = (job.screeningQuestions || [])
+    .map((question) => {
+      const uploadedQuestionFile = uploadedFileMap.get(buildScreeningFileInputName(question.questionId));
+      const answer = screeningAnswers.find((item) => item.questionId === question.questionId);
+      if (question.type === 'FILE_UPLOAD') {
+        if (!uploadedQuestionFile) {
+          return answer || null;
+        }
+        uploadedArtifacts.push({
+          fieldKey: question.questionId,
+          label: question.question,
+          fileKey: buildResumeKey(req.user.id, uploadedQuestionFile.originalname),
+          originalName: uploadedQuestionFile.originalname,
+          mimeType: uploadedQuestionFile.mimetype,
+          size: uploadedQuestionFile.size,
+        });
+        return {
+          questionId: question.questionId,
+          question: question.question,
+          type: question.type,
+          answer: uploadedQuestionFile.originalname,
+        };
+      }
+      return answer || {
+        questionId: question.questionId,
+        question: question.question,
+        type: question.type,
+        answer: null,
+      };
+    })
+    .filter(Boolean);
+
+  for (const artifact of uploadedArtifacts.filter((item) => item.fieldKey !== 'resume')) {
+    const matchingFile =
+      uploadedFileMap.get(buildApplicationFieldFileInputName(artifact.fieldKey))
+      || uploadedFileMap.get(buildScreeningFileInputName(artifact.fieldKey));
+    if (!matchingFile) {
+      continue;
+    }
+    await uploadBuffer({
+      key: artifact.fileKey,
+      body: matchingFile.buffer,
+      contentType: matchingFile.mimetype,
+    });
+  }
+
   const application = await Application.create({
-    tenantId: req.user.tenantId || req.tenant?.id || (await getDefaultTenantId()),
+    tenantId: getRequestTenantId(req, { allowPlatformSuperAdmin: false }),
     jobId: job._id,
     studentId: req.user.id,
     status: 'APPLIED',
@@ -321,8 +441,8 @@ const applyJob = catchAsync(async (req, res, next) => {
     resumeOriginalName,
     resumeMimeType,
     resumeSize,
-    submittedFields,
-    screeningAnswers,
+    submittedFields: normalizedSubmittedFields,
+    screeningAnswers: normalizedScreeningAnswers,
     uploadedArtifacts,
     currentStageKey: appliedStage?.stageKey || DEFAULT_STAGE.stageKey,
     currentStageLabel: appliedStage?.label || DEFAULT_STAGE.label,
@@ -341,7 +461,7 @@ const applyJob = catchAsync(async (req, res, next) => {
   const applicantFullName = [fullNameField?.value, lastNameField?.value].filter(Boolean).join(' ').trim();
   await sendApplicationConfirmation({
     email: req.user.email,
-    fullName: applicantFullName || profile?.fullName || req.user.fullName || req.user.email,
+    fullName: applicantFullName || req.user.fullName || req.user.email,
     jobTitle: job.title,
     companyName: job.companyName,
     tenantId: req.user.tenantId,

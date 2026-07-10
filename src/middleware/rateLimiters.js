@@ -34,9 +34,16 @@ const uploadActionLimiter = createLimiter({
   message: 'Too many upload attempts. Please try again later.',
 });
 
+const searchLimiter = createLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: 'Too many search requests. Please try again later.',
+});
+
 module.exports = {
   strictAuthLimiter,
   tokenActionLimiter,
   inviteActionLimiter,
   uploadActionLimiter,
+  searchLimiter,
 };

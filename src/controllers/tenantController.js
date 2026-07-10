@@ -21,15 +21,16 @@ async function resolveTenantForPublicRequest(req) {
 }
 
 function getAssetUrl(assetType, tenant) {
+  const version = new Date(tenant.updatedAt || Date.now()).getTime();
   if (assetType === 'logo') {
     if (tenant.logoKey) {
-      return `/api/v1/tenant/assets/logo?v=${new Date(tenant.updatedAt || Date.now()).getTime()}`;
+      return `/api/v1/tenant/assets/logo?v=${version}&tenant=${tenant.slug}`;
     }
     return tenant.logoUrl || '';
   }
 
   if (tenant.faviconKey) {
-    return `/api/v1/tenant/assets/favicon?v=${new Date(tenant.updatedAt || Date.now()).getTime()}`;
+    return `/api/v1/tenant/assets/favicon?v=${version}&tenant=${tenant.slug}`;
   }
 
   return tenant.faviconUrl || '';

@@ -10,10 +10,26 @@ const { hashToken } = require('../services/atsService');
 const { getRequestOrigin } = require('../utils/requestOrigin');
 const { buildTenantAppOrigin, buildTenantAppUrl } = require('../services/tenantService');
 const config = require('../config');
+const { assertValidPassword } = require('../utils/passwordValidation');
 
 const MAX_ATTEMPTS = 5;
 const LOCK_TIME = 15 * 60 * 1000;
 const RESET_WINDOW = 15 * 60 * 1000;
+
+function serializeAuthenticatedUser(user) {
+  return {
+    id: user._id,
+    tenantId: user.tenantId || null,
+    username: user.username || '',
+    email: user.email,
+    role: user.role,
+    fullName: user.fullName || '',
+    status: user.status,
+    forcePasswordChange: Boolean(user.forcePasswordChange),
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
 
 function normalizeLoginIdentifier(value) {
   return String(value || '').trim().toLowerCase();
@@ -126,16 +142,7 @@ const login = catchAsync(async (req, res, next) => {
   res.cookie('refreshToken', refreshToken, cookieOptions());
   return sendData(res, 200, {
     accessToken,
-    user: {
-      id: user._id,
-      tenantId: user.tenantId,
-      username: user.username || '',
-      email: user.email,
-      role: user.role,
-      fullName: user.fullName,
-      status: user.status,
-      forcePasswordChange: Boolean(user.forcePasswordChange),
-    },
+    user: serializeAuthenticatedUser(user),
   });
 });
 
@@ -238,6 +245,7 @@ const resetPassword = catchAsync(async (req, res, next) => {
   if (!user) {
     return next(new AppError('Invalid or expired reset token', 400));
   }
+  assertValidPassword(req.body.newPassword, 'New password');
   user.password = await bcrypt.hash(req.body.newPassword, 10);
   user.resetToken = undefined;
   user.resetTokenExpiry = undefined;
@@ -258,6 +266,7 @@ const activateInvite = catchAsync(async (req, res, next) => {
   if (!user) {
     return next(new AppError('Invalid or expired invitation token', 400));
   }
+  assertValidPassword(req.body.password, 'Password');
   user.password = await bcrypt.hash(req.body.password, 10);
   user.status = 'ACTIVE';
   user.inviteToken = undefined;
@@ -276,6 +285,7 @@ const forcePasswordChange = catchAsync(async (req, res, next) => {
     return next(new AppError('User not found', 404));
   }
 
+  assertValidPassword(req.body.newPassword, 'New password');
   user.password = await bcrypt.hash(req.body.newPassword, 10);
   user.forcePasswordChange = false;
   user.refreshToken = undefined;
@@ -291,7 +301,7 @@ const me = catchAsync(async (req, res, next) => {
   if (!user) {
     return next(new AppError('User not found', 404));
   }
-  return sendData(res, 200, user);
+  return sendData(res, 200, serializeAuthenticatedUser(user));
 });
 
 module.exports = {

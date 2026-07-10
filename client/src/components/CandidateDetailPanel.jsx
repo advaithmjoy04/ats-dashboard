@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react';
 import PopupShell from './PopupShell';
 import { formatDate } from '../utils/formatters';
 
+function formatAnswerValue(value) {
+  if (Array.isArray(value)) {
+    return value.join(', ') || '--';
+  }
+  if (value === null || value === undefined || value === '') {
+    return '--';
+  }
+  return String(value);
+}
+
 function CandidateDetailPanel({
   candidate,
   showJobSummary = true,
@@ -29,6 +39,7 @@ function CandidateDetailPanel({
 
   const applicationFields = (candidate.submittedFields || []).filter((field) => field.fieldKey !== 'resume');
   const primaryResumeLink = candidate.uploadedArtifacts?.find((artifact) => artifact.fieldKey === 'resume')?.url || candidate.student?.resumeUrl;
+  const artifactMap = new Map((candidate.uploadedArtifacts || []).map((artifact) => [artifact.fieldKey, artifact]));
 
   async function handleSubmitFeedback(event) {
     event.preventDefault();
@@ -140,7 +151,13 @@ function CandidateDetailPanel({
               {applicationFields.map((field) => (
                 <div key={field.fieldKey}>
                   <strong>{field.label}</strong>
-                  <span>{String(field.value ?? '--')}</span>
+                  {field.type === 'FILE_UPLOAD' && artifactMap.get(field.fieldKey)?.url ? (
+                    <a href={artifactMap.get(field.fieldKey).url} target="_blank" rel="noreferrer">
+                      {artifactMap.get(field.fieldKey).originalName || 'View file'}
+                    </a>
+                  ) : (
+                    <span>{formatAnswerValue(field.value)}</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -153,7 +170,14 @@ function CandidateDetailPanel({
               <ul className="review-list">
                 {candidate.screeningAnswers.map((answer) => (
                   <li key={answer.questionId}>
-                    <strong>{answer.question}:</strong> {String(answer.answer ?? '--')}
+                    <strong>{answer.question}:</strong>{' '}
+                    {answer.type === 'FILE_UPLOAD' && artifactMap.get(answer.questionId)?.url ? (
+                      <a href={artifactMap.get(answer.questionId).url} target="_blank" rel="noreferrer">
+                        {artifactMap.get(answer.questionId).originalName || 'View file'}
+                      </a>
+                    ) : (
+                      formatAnswerValue(answer.answer)
+                    )}
                   </li>
                 ))}
               </ul>

@@ -15,8 +15,21 @@ const {
 const authenticateToken = require('../middleware/auth');
 const requirePlatformRole = require('../middleware/requirePlatformRole');
 const validate = require('../middleware/validate');
+const { isStrongPassword, PASSWORD_VALIDATION_MESSAGE } = require('../utils/passwordValidation');
 
 const router = express.Router();
+
+function validateOptionalStrongPassword(value) {
+  if (!value) {
+    return true;
+  }
+
+  if (!isStrongPassword(value)) {
+    throw new Error(PASSWORD_VALIDATION_MESSAGE);
+  }
+
+  return true;
+}
 
 router.use(authenticateToken, requirePlatformRole);
 
@@ -37,7 +50,7 @@ router.post(
   body('loginSubtext').optional().isString().trim().isLength({ max: 320 }),
   body('adminEmail').isEmail(),
   body('adminUsername').optional({ values: 'falsy' }).isString().trim().isLength({ min: 3, max: 60 }),
-  body('adminPassword').optional({ values: 'falsy' }).isString().isLength({ min: 8, max: 128 }),
+  body('adminPassword').optional({ values: 'falsy' }).isString().isLength({ max: 128 }).custom(validateOptionalStrongPassword),
   body('adminFullName').isString().trim().isLength({ min: 2, max: 120 }),
   body('isActive').optional().isBoolean(),
   validate,
@@ -48,7 +61,7 @@ router.post(
   body('fullName').isString().trim().isLength({ min: 2, max: 120 }),
   body('email').isEmail(),
   body('username').optional({ values: 'falsy' }).isString().trim().isLength({ min: 3, max: 60 }),
-  body('password').optional({ values: 'falsy' }).isString().isLength({ min: 8, max: 128 }),
+  body('password').optional({ values: 'falsy' }).isString().isLength({ max: 128 }).custom(validateOptionalStrongPassword),
   validate,
   createTenantAdmin
 );

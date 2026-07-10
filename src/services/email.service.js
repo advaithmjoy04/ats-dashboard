@@ -55,6 +55,12 @@ async function send(email, type, subject, templateName, data, options = {}) {
     logoUrl: branding.logoUrl,
     appOrigin,
   });
+
+  if (config.nodeEnv === 'test') {
+    await EmailLog.create({ tenantId: branding.tenantId, email, type, status: 'SENT', sentAt: new Date() });
+    return { skipped: true, subject, html };
+  }
+
   try {
     await transporter.sendMail({
       from: buildFromAddress(branding.emailFromName),

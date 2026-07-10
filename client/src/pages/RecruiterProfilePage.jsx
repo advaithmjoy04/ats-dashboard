@@ -35,32 +35,58 @@ function RecruiterProfilePage() {
 
   return (
     <div className="page-stack">
-      <section className="panel placeholder-page">
-        <h2>Profile</h2>
-        <p>Recruiter account details for the hiring portal.</p>
-      </section>
       {error ? <div className="error-banner">{error}</div> : null}
       {loading ? (
         <div className="screen-center">Loading profile...</div>
       ) : (
-        <section className="panel detail-panel-grid">
-          <div>
-            <h3>Full name</h3>
-            <p>{user?.fullName || '--'}</p>
-          </div>
-          <div>
-            <h3>Email</h3>
-            <p>{user?.email || '--'}</p>
-          </div>
-          <div>
-            <h3>Role</h3>
-            <p>{user?.role || '--'}</p>
-          </div>
-          <div>
-            <h3>Status</h3>
-            <p>{user?.status || '--'}</p>
-          </div>
-        </section>
+        <>
+          <section className="toolbar">
+            <div>
+              <h2 className="page-title">Recruiter Profile</h2>
+              <p className="page-description">Review the account that owns your assigned jobs and candidate access.</p>
+            </div>
+            <div className="summary-pill">{user?.status || 'ACTIVE'}</div>
+          </section>
+
+          <section className="panel">
+            <div className="candidate-directory-shell recruiter-profile-shell">
+              <div className="candidate-directory-copy">
+                <span className="eyebrow">Account Overview</span>
+                <h3>{user?.fullName || 'Recruiter'}</h3>
+                <p className="page-description">This account is used for recruiter-owned jobs, pipeline reviews, and student-facing feedback updates.</p>
+              </div>
+              <div className="candidate-directory-stats">
+                <article className="candidate-stat-card">
+                  <span>Role</span>
+                  <strong>{user?.role || '--'}</strong>
+                </article>
+                <article className="candidate-stat-card">
+                  <span>Status</span>
+                  <strong>{user?.status || '--'}</strong>
+                </article>
+              </div>
+            </div>
+
+            <div className="review-grid">
+              <div>
+                <strong>Full name</strong>
+                <span>{user?.fullName || '--'}</span>
+              </div>
+              <div>
+                <strong>Email</strong>
+                <span>{user?.email || '--'}</span>
+              </div>
+              <div>
+                <strong>Recruiter scope</strong>
+                <span>Only recruiter-owned or assigned jobs</span>
+              </div>
+              <div>
+                <strong>Candidate access</strong>
+                <span>Submitted application data, resume, and feedback only</span>
+              </div>
+            </div>
+          </section>
+        </>
       )}
     </div>
   );

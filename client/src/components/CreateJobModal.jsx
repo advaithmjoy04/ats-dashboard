@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 
 const defaultApplicationFields = [
-  { key: 'firstName', label: 'First Name', category: 'Personal Information', mode: 'MANDATORY', placeholder: 'First Name' },
-  { key: 'lastName', label: 'Last Name', category: 'Personal Information', mode: 'MANDATORY', placeholder: 'Last Name' },
-  { key: 'email', label: 'Email', category: 'Personal Information', mode: 'MANDATORY', placeholder: 'Email Address' },
-  { key: 'contactNumber', label: 'Contact Number', category: 'Personal Information', mode: 'MANDATORY', placeholder: 'Contact Number' },
-  { key: 'address', label: 'Address', category: 'Personal Information', mode: 'OFF', placeholder: 'Address' },
-  { key: 'resume', label: 'Resume', category: 'Professional Information', mode: 'MANDATORY', placeholder: '' },
-  { key: 'cgpa', label: 'CGPA', category: 'Academic Information', mode: 'OPTIONAL', placeholder: 'Enter CGPA' },
-  { key: 'skills', label: 'Skills', category: 'Professional Information', mode: 'OPTIONAL', placeholder: 'List relevant skills' },
-  { key: 'workExperience', label: 'Work Experience', category: 'Professional Information', mode: 'OPTIONAL', placeholder: 'Work Experience' },
-  { key: 'educationDetails', label: 'Education Details', category: 'Professional Information', mode: 'OPTIONAL', placeholder: 'Education Details' },
-  { key: 'noticePeriod', label: 'Notice Period', category: 'Professional Information', mode: 'OFF', placeholder: 'Notice Period' },
-  { key: 'portfolioUrl', label: 'Work Link / Portfolio', category: 'Professional Information', mode: 'OFF', placeholder: 'Portfolio URL' },
+  { key: 'firstName', label: 'First Name', category: 'Personal Information', type: 'TEXT', mode: 'MANDATORY', placeholder: 'First Name' },
+  { key: 'lastName', label: 'Last Name', category: 'Personal Information', type: 'TEXT', mode: 'MANDATORY', placeholder: 'Last Name' },
+  { key: 'email', label: 'Email', category: 'Personal Information', type: 'EMAIL', mode: 'MANDATORY', placeholder: 'Email Address' },
+  { key: 'contactNumber', label: 'Contact Number', category: 'Personal Information', type: 'PHONE', mode: 'MANDATORY', placeholder: 'Contact Number' },
+  { key: 'address', label: 'Address', category: 'Personal Information', type: 'TEXTAREA', mode: 'OFF', placeholder: 'Address' },
+  { key: 'resume', label: 'Resume', category: 'Professional Information', type: 'FILE_UPLOAD', mode: 'MANDATORY', placeholder: '' },
+  { key: 'cgpa', label: 'CGPA', category: 'Academic Information', type: 'NUMBER', mode: 'OPTIONAL', placeholder: 'Enter CGPA' },
+  { key: 'skills', label: 'Skills', category: 'Professional Information', type: 'TEXTAREA', mode: 'OPTIONAL', placeholder: 'List relevant skills' },
+  { key: 'workExperience', label: 'Work Experience', category: 'Professional Information', type: 'TEXTAREA', mode: 'OPTIONAL', placeholder: 'Work Experience' },
+  { key: 'educationDetails', label: 'Education Details', category: 'Professional Information', type: 'TEXTAREA', mode: 'OPTIONAL', placeholder: 'Education Details' },
+  { key: 'noticePeriod', label: 'Notice Period', category: 'Professional Information', type: 'TEXT', mode: 'OFF', placeholder: 'Notice Period' },
+  { key: 'portfolioUrl', label: 'Work Link / Portfolio', category: 'Professional Information', type: 'URL', mode: 'OFF', placeholder: 'Portfolio URL' },
 ];
 
 const defaultHiringStages = [
@@ -168,10 +168,11 @@ function CreateJobModal({
       publishState: form.publishState,
       status: form.publishState,
       assignedRecruiters: allowRecruiterAssignments && form.assignedRecruiterId ? [form.assignedRecruiterId] : [],
-      applicationFormFields: form.applicationFormFields.map(({ key, label, category, mode, placeholder }) => ({
+      applicationFormFields: form.applicationFormFields.map(({ key, label, category, type, mode, placeholder }) => ({
         key,
         label,
         category,
+        type,
         mode,
         placeholder,
       })),
@@ -524,7 +525,7 @@ function CreateJobModal({
                       <div className="application-field-row" key={field.key}>
                         <div>
                           <strong>{field.label}</strong>
-                          <span>{field.category}</span>
+                          <span>{field.category} · {field.type}</span>
                         </div>
                         <div className="segmented-control compact-segments">
                           {['MANDATORY', 'OPTIONAL', 'OFF'].map((mode) => (
@@ -635,12 +636,12 @@ function CreateJobModal({
                     {visibleApplicationFields.map((field) => (
                       <div className="preview-field" key={field.key}>
                         <strong>{field.label}{field.mode === 'MANDATORY' ? ' *' : ''}</strong>
-                        {field.key === 'resume' ? (
+                        {field.type === 'FILE_UPLOAD' ? (
                           <div className="preview-upload-box">Upload resume for this application</div>
-                        ) : field.key === 'educationDetails' || field.key === 'skills' ? (
+                        ) : field.type === 'TEXTAREA' ? (
                           <textarea rows={field.key === 'educationDetails' ? 4 : 3} readOnly placeholder={field.placeholder || field.label} />
                         ) : (
-                          <input readOnly placeholder={field.placeholder || field.label} />
+                          <input readOnly type={field.type === 'EMAIL' ? 'email' : field.type === 'URL' ? 'url' : field.type === 'PHONE' ? 'tel' : field.type === 'NUMBER' ? 'number' : 'text'} placeholder={field.placeholder || field.label} />
                         )}
                       </div>
                     ))}

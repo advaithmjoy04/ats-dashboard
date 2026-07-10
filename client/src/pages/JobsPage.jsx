@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import api from '../api/client';
 import CreateJobModal from '../components/CreateJobModal';
 import JobCard from '../components/JobCard';
+import { emitActivityRefresh } from '../utils/activitySignals';
 
 function JobsPage() {
   const { search } = useOutletContext();
@@ -92,6 +93,7 @@ function JobsPage() {
       setModalOpen(false);
       setMessage('Job created successfully');
       await loadData();
+      emitActivityRefresh({ scope: 'admin', action: 'job.created' });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to create job.');
     } finally {
@@ -111,6 +113,7 @@ function JobsPage() {
       await api.delete(`/admin/jobs/${job.jobId}`, { data: { passwordConfirmation } });
       setMessage(`Removed ${job.companyName} - ${job.role}`);
       await loadData();
+      emitActivityRefresh({ scope: 'admin', action: 'job.deleted', jobId: job.jobId });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to remove job.');
     } finally {

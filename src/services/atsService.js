@@ -6,18 +6,18 @@ const { getDefaultTenantId } = require('./tenantService');
 
 const APPLICATION_STATUSES = ['APPLIED', 'SHORTLISTED', 'REJECTED', 'SELECTED', 'WITHDRAWN'];
 const DEFAULT_APPLICATION_FORM_FIELDS = [
-  { key: 'firstName', label: 'First Name', category: 'PERSONAL', mode: 'MANDATORY', placeholder: 'First Name' },
-  { key: 'lastName', label: 'Last Name', category: 'PERSONAL', mode: 'MANDATORY', placeholder: 'Last Name' },
-  { key: 'email', label: 'Email', category: 'PERSONAL', mode: 'MANDATORY', placeholder: 'Email Address' },
-  { key: 'contactNumber', label: 'Contact Number', category: 'PERSONAL', mode: 'MANDATORY', placeholder: 'Contact Number' },
-  { key: 'address', label: 'Address', category: 'PERSONAL', mode: 'OFF', placeholder: 'Address' },
-  { key: 'resume', label: 'Resume', category: 'PROFESSIONAL', mode: 'MANDATORY' },
-  { key: 'cgpa', label: 'CGPA', category: 'ACADEMIC', mode: 'OPTIONAL', placeholder: 'Enter CGPA' },
-  { key: 'skills', label: 'Skills', category: 'PROFESSIONAL', mode: 'OPTIONAL', placeholder: 'List relevant skills' },
-  { key: 'workExperience', label: 'Work Experience', category: 'PROFESSIONAL', mode: 'OPTIONAL' },
-  { key: 'educationDetails', label: 'Education Details', category: 'PROFESSIONAL', mode: 'OPTIONAL' },
-  { key: 'noticePeriod', label: 'Notice Period', category: 'PROFESSIONAL', mode: 'OFF' },
-  { key: 'portfolioUrl', label: 'Work Link / Portfolio', category: 'PROFESSIONAL', mode: 'OFF', placeholder: 'Portfolio URL' },
+  { key: 'firstName', label: 'First Name', category: 'PERSONAL', type: 'TEXT', mode: 'MANDATORY', placeholder: 'First Name' },
+  { key: 'lastName', label: 'Last Name', category: 'PERSONAL', type: 'TEXT', mode: 'MANDATORY', placeholder: 'Last Name' },
+  { key: 'email', label: 'Email', category: 'PERSONAL', type: 'EMAIL', mode: 'MANDATORY', placeholder: 'Email Address' },
+  { key: 'contactNumber', label: 'Contact Number', category: 'PERSONAL', type: 'PHONE', mode: 'MANDATORY', placeholder: 'Contact Number' },
+  { key: 'address', label: 'Address', category: 'PERSONAL', type: 'TEXTAREA', mode: 'OFF', placeholder: 'Address' },
+  { key: 'resume', label: 'Resume', category: 'PROFESSIONAL', type: 'FILE_UPLOAD', mode: 'MANDATORY' },
+  { key: 'cgpa', label: 'CGPA', category: 'ACADEMIC', type: 'NUMBER', mode: 'OPTIONAL', placeholder: 'Enter CGPA' },
+  { key: 'skills', label: 'Skills', category: 'PROFESSIONAL', type: 'TEXTAREA', mode: 'OPTIONAL', placeholder: 'List relevant skills' },
+  { key: 'workExperience', label: 'Work Experience', category: 'PROFESSIONAL', type: 'TEXTAREA', mode: 'OPTIONAL' },
+  { key: 'educationDetails', label: 'Education Details', category: 'PROFESSIONAL', type: 'TEXTAREA', mode: 'OPTIONAL' },
+  { key: 'noticePeriod', label: 'Notice Period', category: 'PROFESSIONAL', type: 'TEXT', mode: 'OFF' },
+  { key: 'portfolioUrl', label: 'Work Link / Portfolio', category: 'PROFESSIONAL', type: 'URL', mode: 'OFF', placeholder: 'Portfolio URL' },
 ];
 const DEFAULT_HIRING_STAGES = [
   { stageKey: 'sourced', label: 'Sourced', order: 0, locked: true },
@@ -200,6 +200,8 @@ function sanitizeApplicationFormFields(fields = []) {
     return DEFAULT_APPLICATION_FORM_FIELDS;
   }
 
+  const defaultFieldMap = new Map(DEFAULT_APPLICATION_FORM_FIELDS.map((field) => [field.key, field]));
+
   return fields
     .map((field) => {
       if (!field || typeof field !== 'object') {
@@ -212,10 +214,16 @@ function sanitizeApplicationFormFields(fields = []) {
         return null;
       }
 
+      const defaultField = defaultFieldMap.get(key);
+      const type = ['TEXT', 'EMAIL', 'PHONE', 'NUMBER', 'TEXTAREA', 'URL', 'FILE_UPLOAD'].includes(field.type)
+        ? field.type
+        : defaultField?.type || 'TEXT';
+
       return {
         key,
         label,
         category: String(field.category || '').trim(),
+        type,
         mode: ['MANDATORY', 'OPTIONAL', 'OFF'].includes(field.mode) ? field.mode : 'OPTIONAL',
         placeholder: String(field.placeholder || '').trim(),
         helpText: String(field.helpText || '').trim(),
@@ -396,86 +404,71 @@ async function getResumeReadUrl(key) {
   return getReadUrl(key, 900);
 }
 
-async function listAdminCandidates({ tenantId, jobId, status, search, page, limit }) {
-  const query = tenantId ? { tenantId } : {};
-  if (status && APPLICATION_STATUSES.includes(status)) {
-    query.status = status;
-  }
-  if (jobId) {
-    const job = await Job.findOne({ jobId, ...(tenantId ? { tenantId } : {}) }).select('_id').lean();
-    if (!job) {
-      return {
-        items: [],
-        pagination: {
-          page: Math.max(Number(page) || 1, 1),
-          limit: Math.min(Math.max(Number(limit) || 10, 1), 100),
-          total: 0,
-          totalPages: 1,
-        },
-      };
-    }
-    query.jobId = job._id;
+function buildEmptyPagination(page, limit) {
+  return {
+    items: [],
+    pagination: {
+      page: Math.max(Number(page) || 1, 1),
+      limit: Math.min(Math.max(Number(limit) || 10, 1), 100),
+      total: 0,
+      totalPages: 1,
+    },
+  };
+}
+
+function buildSearchRegex(search) {
+  if (!search || !String(search).trim()) {
+    return null;
   }
 
-  if (search) {
-    const searchRegex = new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    const matchedProfiles = await StudentProfile.find({
-      ...(tenantId ? { tenantId } : {}),
-      $or: [
-        { fullName: searchRegex },
-        { usn: searchRegex },
-        { branch: searchRegex },
-        { skills: searchRegex },
-      ],
-    })
-      .select('userId')
-      .lean();
-    const matchedUsers = await User.find({
-      ...(tenantId ? { tenantId } : {}),
-      $or: [{ email: searchRegex }, { fullName: searchRegex }],
-    })
-      .select('_id')
-      .lean();
-    const matchedJobs = await Job.find({
-      ...(tenantId ? { tenantId } : {}),
-      $or: [{ title: searchRegex }, { role: searchRegex }, { companyName: searchRegex }],
-    })
-      .select('_id')
-      .lean();
+  return new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+}
 
-    const studentIds = new Set([
-      ...matchedProfiles.map((profile) => String(profile.userId)),
-      ...matchedUsers.map((user) => String(user._id)),
-    ]);
-    const jobIds = matchedJobs.map((job) => job._id);
-
-    query.$or = [
-      ...(studentIds.size ? [{ studentId: { $in: Array.from(studentIds) } }] : []),
-      ...(jobIds.length ? [{ jobId: { $in: jobIds } }] : []),
-    ];
-
-    if (!query.$or.length) {
-      return {
-        items: [],
-        pagination: {
-          page: Math.max(Number(page) || 1, 1),
-          limit: Math.min(Math.max(Number(limit) || 10, 1), 100),
-          total: 0,
-          totalPages: 1,
-        },
-      };
-    }
+async function applyCandidateSearchToQuery(query, tenantId, search) {
+  const searchRegex = buildSearchRegex(search);
+  if (!searchRegex) {
+    return true;
   }
 
-  const paginated = await paginate(Application, query, {
-    page,
-    limit,
-    populate: [
-      { path: 'jobId', match: tenantId ? { tenantId } : {} },
-      { path: 'studentId', select: 'email fullName tenantId', match: tenantId ? { tenantId } : {} },
+  const matchedProfiles = await StudentProfile.find({
+    ...(tenantId ? { tenantId } : {}),
+    $or: [
+      { fullName: searchRegex },
+      { usn: searchRegex },
+      { branch: searchRegex },
+      { skills: searchRegex },
     ],
-  });
+  })
+    .select('userId')
+    .lean();
+  const matchedUsers = await User.find({
+    ...(tenantId ? { tenantId } : {}),
+    $or: [{ email: searchRegex }, { fullName: searchRegex }],
+  })
+    .select('_id')
+    .lean();
+  const matchedJobs = await Job.find({
+    ...(tenantId ? { tenantId } : {}),
+    $or: [{ title: searchRegex }, { role: searchRegex }, { companyName: searchRegex }],
+  })
+    .select('_id')
+    .lean();
 
+  const studentIds = new Set([
+    ...matchedProfiles.map((profile) => String(profile.userId)),
+    ...matchedUsers.map((user) => String(user._id)),
+  ]);
+  const jobIds = matchedJobs.map((job) => job._id);
+
+  query.$or = [
+    ...(studentIds.size ? [{ studentId: { $in: Array.from(studentIds) } }] : []),
+    ...(jobIds.length ? [{ jobId: { $in: jobIds } }] : []),
+  ];
+
+  return Boolean(query.$or.length);
+}
+
+async function mapCandidateApplications(paginated, tenantId) {
   const profileIds = paginated.items.map((application) => application.studentId?._id).filter(Boolean);
   const profiles = await StudentProfile.find({
     ...(tenantId ? { tenantId } : {}),
@@ -483,7 +476,7 @@ async function listAdminCandidates({ tenantId, jobId, status, search, page, limi
   }).lean();
   const profileMap = new Map(profiles.map((profile) => [String(profile.userId), profile]));
 
-  const mapped = await Promise.all(
+  return Promise.all(
     paginated.items.map(async (application) => {
       const profile = profileMap.get(String(application.studentId?._id));
       const applicationSkills = extractSubmittedSkills(application.submittedFields || []);
@@ -495,6 +488,7 @@ async function listAdminCandidates({ tenantId, jobId, status, search, page, limi
           url: artifact.fileKey ? await getReadUrl(artifact.fileKey, 900) : null,
         }))
       );
+
       return {
         id: application._id,
         status: application.status,
@@ -524,36 +518,104 @@ async function listAdminCandidates({ tenantId, jobId, status, search, page, limi
           usn: profile?.usn || '',
           branch: profile?.branch || '',
           semester: profile?.semester,
-          cgpa: applicationCgpa || profile?.cgpa,
-          skills: applicationSkills.length ? applicationSkills : (profile?.skills || []),
-          educationDetails: applicationEducation || profile?.educationDetails || '',
-          resumeKey: application.resumeKey || profile?.resumeKey,
-          resumeOriginalName: application.resumeOriginalName || profile?.resumeOriginalName,
-          resumeUrl: application.resumeKey
-            ? await getReadUrl(application.resumeKey, 900)
-            : profile?.resumeKey
-              ? await getReadUrl(profile.resumeKey, 900)
-              : null,
+          cgpa: applicationCgpa || '--',
+          skills: applicationSkills,
+          educationDetails: applicationEducation || '',
+          resumeKey: application.resumeKey || null,
+          resumeOriginalName: application.resumeOriginalName || '',
+          resumeUrl: application.resumeKey ? await getReadUrl(application.resumeKey, 900) : null,
         },
         skillMatch: computeSkillMatch(
-          applicationSkills.length ? applicationSkills : (profile?.skills || []),
+          applicationSkills,
           application.jobId?.requiredSkills || [],
           application.jobId?.prioritySkills || []
         ),
       };
     })
   );
+}
+
+async function listScopedCandidates({ tenantId, jobMongoIds, status, search, page, limit }) {
+  const query = tenantId ? { tenantId } : {};
+  if (status && APPLICATION_STATUSES.includes(status)) {
+    query.status = status;
+  }
+  if (jobMongoIds?.length) {
+    query.jobId = { $in: jobMongoIds };
+  }
+
+  const hasSearchMatches = await applyCandidateSearchToQuery(query, tenantId, search);
+  if (!hasSearchMatches) {
+    return buildEmptyPagination(page, limit);
+  }
+
+  const paginated = await paginate(Application, query, {
+    page,
+    limit,
+    populate: [
+      { path: 'jobId', match: tenantId ? { tenantId } : {} },
+      { path: 'studentId', select: 'email fullName tenantId', match: tenantId ? { tenantId } : {} },
+    ],
+  });
 
   return {
-    items: mapped,
+    items: await mapCandidateApplications(paginated, tenantId),
     pagination: paginated.pagination,
   };
 }
 
-async function getApplicantsForRecruiter(recruiterId, tenantId, jobId, { page, limit }) {
-  const job = await Job.findOne({ jobId, tenantId, assignedRecruiters: recruiterId }).lean();
+async function listAdminCandidates({ tenantId, jobId, status, search, page, limit }) {
+  let jobMongoIds;
+  if (jobId) {
+    const job = await Job.findOne({ jobId, ...(tenantId ? { tenantId } : {}) }).select('_id').lean();
+    if (!job) {
+      return buildEmptyPagination(page, limit);
+    }
+    jobMongoIds = [job._id];
+  }
+
+  return listScopedCandidates({ tenantId, jobMongoIds, status, search, page, limit });
+}
+
+async function listRecruiterCandidates({ recruiterId, tenantId, jobId, status, search, page, limit }) {
+  const recruiterJobQuery = {
+    tenantId,
+    $or: [
+      { postedBy: recruiterId },
+      { assignedRecruiters: recruiterId },
+    ],
+  };
+
+  if (jobId) {
+    recruiterJobQuery.jobId = jobId;
+  }
+
+  const recruiterJobs = await Job.find(recruiterJobQuery).select('_id jobId').lean();
+  if (!recruiterJobs.length) {
+    return buildEmptyPagination(page, limit);
+  }
+
+  return listScopedCandidates({
+    tenantId,
+    jobMongoIds: recruiterJobs.map((job) => job._id),
+    status,
+    search,
+    page,
+    limit,
+  });
+}
+
+async function getApplicantsForRecruiter(recruiterId, tenantId, jobId, { page, limit, search, status } = {}) {
+  const job = await Job.findOne({
+    jobId,
+    tenantId,
+    $or: [
+      { postedBy: recruiterId },
+      { assignedRecruiters: recruiterId },
+    ],
+  }).lean();
   if (!job) throw new AppError('Job not found or not assigned', 404);
-  const candidates = await listAdminCandidates({ tenantId, jobId, page, limit });
+  const candidates = await listRecruiterCandidates({ recruiterId, tenantId, jobId, status, search, page, limit });
   return {
     job: {
       id: job._id,
@@ -591,7 +653,10 @@ async function getAdminDashboardSummary(tenantId) {
 }
 
 async function createRecruiterOwnedJob(recruiterId, payload) {
-  const tenantId = payload.tenantId || (await getDefaultTenantId());
+  const tenantId = payload.tenantId;
+  if (!tenantId) {
+    throw new AppError('Tenant context required to create recruiter-owned jobs', 403);
+  }
   const assignedRecruiters = await sanitizeRecruiterAssignments(tenantId, payload.assignedRecruiters, recruiterId);
   const jobData = normalizeJobPayload(payload);
   return Job.create({
@@ -604,7 +669,10 @@ async function createRecruiterOwnedJob(recruiterId, payload) {
 }
 
 async function ensureRecruiterOwnsJob(recruiterId, tenantId, jobId) {
-  const job = await Job.findOne({ jobId, ...(tenantId ? { tenantId } : {}) });
+  if (!tenantId) {
+    throw new AppError('Tenant context required to access recruiter jobs', 403);
+  }
+  const job = await Job.findOne({ jobId, tenantId });
   if (!job) throw new AppError('Job not found', 404);
   if (String(job.postedBy) !== String(recruiterId) && !job.assignedRecruiters.some((id) => String(id) === String(recruiterId))) {
     throw new AppError('Forbidden', 403);
@@ -624,6 +692,7 @@ module.exports = {
   sanitizeRecruiterAssignments,
   normalizeJobPayload,
   listAdminCandidates,
+  listRecruiterCandidates,
   getApplicantsForRecruiter,
   getAdminDashboardSummary,
   createRecruiterOwnedJob,

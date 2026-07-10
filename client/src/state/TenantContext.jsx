@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import api, { TENANT_HINT_STORAGE_KEY } from '../api/client';
 import { getTenantSlugFromPath } from '../utils/tenantRouting';
 
@@ -7,12 +8,31 @@ const defaultBrand = {
   slug: 'default-institute',
   logoUrl: '',
   faviconUrl: '',
-  primaryColor: '#3d79f2',
-  secondaryColor: '#18212f',
+  primaryColor: '#F9930C',
+  secondaryColor: '#F5EEE1',
   loginHeadline: 'Sign In',
   loginSubtext: 'Access your ATS account to manage jobs, applications, and placement activity.',
   supportEmail: '',
 };
+
+function isDarkColor(hex) {
+  if (!hex || hex[0] !== '#') return true;
+  const color = hex.substring(1);
+  let r, g, b;
+  if (color.length === 3) {
+    r = parseInt(color[0] + color[0], 16);
+    g = parseInt(color[1] + color[1], 16);
+    b = parseInt(color[2] + color[2], 16);
+  } else if (color.length === 6) {
+    r = parseInt(color.substring(0, 2), 16);
+    g = parseInt(color.substring(2, 4), 16);
+    b = parseInt(color.substring(4, 6), 16);
+  } else {
+    return true;
+  }
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luma < 120;
+}
 
 const TenantContext = createContext({
   tenant: defaultBrand,
@@ -22,6 +42,7 @@ const TenantContext = createContext({
 });
 
 export function TenantProvider({ children }) {
+  const location = useLocation();
   const [state, setState] = useState({
     tenant: defaultBrand,
     loading: true,
@@ -99,9 +120,28 @@ export function TenantProvider({ children }) {
 
   useEffect(() => {
     const tenant = state.tenant || defaultBrand;
+    const isPlatformPath = location.pathname.startsWith('/platform');
+
+    if (isPlatformPath) {
+      document.title = 'Platform Console';
+      document.documentElement.style.setProperty('--primary', '#F9930C');
+      document.documentElement.style.setProperty('--text', '#F5EEE1');
+
+      let link = document.querySelector("link[rel='icon']");
+      if (link) {
+        link.href = '/favicon.ico';
+      }
+      return;
+    }
+
     document.title = tenant.name || defaultBrand.name;
     document.documentElement.style.setProperty('--primary', tenant.primaryColor || defaultBrand.primaryColor);
-    document.documentElement.style.setProperty('--text', tenant.secondaryColor || defaultBrand.secondaryColor);
+    
+    let textCol = tenant.secondaryColor || defaultBrand.secondaryColor;
+    if (isDarkColor(textCol)) {
+      textCol = '#F5EEE1';
+    }
+    document.documentElement.style.setProperty('--text', textCol);
 
     if (tenant.faviconUrl) {
       let link = document.querySelector("link[rel='icon']");
@@ -111,8 +151,13 @@ export function TenantProvider({ children }) {
         document.head.appendChild(link);
       }
       link.href = tenant.faviconUrl;
+    } else {
+      let link = document.querySelector("link[rel='icon']");
+      if (link) {
+        link.href = '/favicon.ico';
+      }
     }
-  }, [state.tenant]);
+  }, [state.tenant, location.pathname]);
 
   return <TenantContext.Provider value={{ ...state, reloadTenant }}>{children}</TenantContext.Provider>;
 }

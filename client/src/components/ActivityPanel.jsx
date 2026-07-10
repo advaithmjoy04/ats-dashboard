@@ -4,17 +4,19 @@ function ActivityPanel({ jobs, candidates }) {
   const items = [];
 
   (jobs || []).slice(0, 3).forEach((job) => {
+    if (!job) return;
     items.push({
-      title: `${job.companyName} opened ${job.role}`,
-      subtitle: job.jobId,
+      title: `${job.companyName || 'Company'} opened ${job.role || 'Role'}`,
+      subtitle: job.jobId || '',
       date: job.createdAt,
     });
   });
 
   (candidates || []).slice(0, 3).forEach((candidate) => {
+    if (!candidate) return;
     items.push({
-      title: `${candidate.student.fullName || 'Candidate'} is ${candidate.status.toLowerCase()}`,
-      subtitle: candidate.job ? `${candidate.job.companyName} - ${candidate.job.role}` : 'Application update',
+      title: `${candidate.student?.fullName || 'Candidate'} is ${(candidate.status || 'applied').toLowerCase()}`,
+      subtitle: candidate.job ? `${candidate.job.companyName || 'Company'} - ${candidate.job.role || 'Role'}` : 'Application update',
       date: candidate.appliedAt,
     });
   });

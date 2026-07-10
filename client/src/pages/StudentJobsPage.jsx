@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../api/client';
 import { formatDate } from '../utils/formatters';
 import { useOutletContext } from 'react-router-dom';
 import JobCard from '../components/JobCard';
 import PopupShell from '../components/PopupShell';
+import { emitActivityRefresh } from '../utils/activitySignals';
 
 function formatSalary(job) {
   const salary = job?.salary || {};
@@ -27,8 +28,28 @@ function formatSalary(job) {
   return `${currency} ${minLabel}${hasMax ? ` - ${maxLabel}` : ''}${period}`;
 }
 
+function inferApplicationFieldType(field = {}) {
+  const explicitType = String(field.type || '').trim().toUpperCase();
+  if (explicitType) {
+    return explicitType;
+  }
+
+  const key = String(field.key || '').trim().toLowerCase();
+  if (key === 'resume') return 'FILE_UPLOAD';
+  if (key === 'email') return 'EMAIL';
+  if (key === 'contactNumber' || key === 'phone' || key === 'mobile') return 'PHONE';
+  if (key === 'cgpa' || key === 'currentCgpa' || key === 'openings') return 'NUMBER';
+  if (key === 'portfolioUrl' || key === 'linkedinUrl' || key === 'githubUrl') return 'URL';
+  if (['address', 'workExperience', 'educationDetails', 'skills'].includes(key)) return 'TEXTAREA';
+  return 'TEXT';
+}
+
+function inferScreeningQuestionType(question = {}) {
+  return String(question.type || 'TEXT').trim().toUpperCase() || 'TEXT';
+}
+
 function StudentJobsPage() {
-  const { search } = useOutletContext();
+  const { debouncedSearch, refreshNotifications } = useOutletContext();
   const [jobs, setJobs] = useState([]);
   const [appliedJobIds, setAppliedJobIds] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,13 +60,14 @@ function StudentJobsPage() {
   const [applicationSchema, setApplicationSchema] = useState(null);
   const [applicationForm, setApplicationForm] = useState({});
   const [screeningAnswers, setScreeningAnswers] = useState({});
-  const [resumeFile, setResumeFile] = useState(null);
+  const [applicationFiles, setApplicationFiles] = useState({});
+  const [screeningFiles, setScreeningFiles] = useState({});
   const [openingFormJobId, setOpeningFormJobId] = useState('');
 
   async function loadJobs() {
     try {
       const [jobsResponse, applicationsResponse] = await Promise.all([
-        api.get('/students/jobs', { params: { limit: 50 } }),
+        api.get('/search', { params: { limit: 50, search: debouncedSearch } }),
         api.get('/students/applications/my', { params: { limit: 100 } }),
       ]);
       setJobs(jobsResponse.data.items || []);
@@ -55,6 +77,8 @@ function StudentJobsPage() {
           .filter(Boolean)
       );
       setError('');
+      refreshNotifications?.();
+      emitActivityRefresh({ scope: 'student', action: 'jobs.loaded' });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to load open jobs.');
     } finally {
@@ -64,17 +88,7 @@ function StudentJobsPage() {
 
   useEffect(() => {
     loadJobs();
-  }, []);
-
-  const filteredJobs = useMemo(() => {
-    const query = String(search || '').toLowerCase();
-    if (!query) {
-      return jobs;
-    }
-    return jobs.filter((job) =>
-      [job.companyName, job.title, job.role, job.description, job.jobId].filter(Boolean).join(' ').toLowerCase().includes(query)
-    );
-  }, [jobs, search]);
+  }, [debouncedSearch]);
 
   async function openApplicationForm(job) {
     setOpeningFormJobId(job.jobId);
@@ -91,7 +105,8 @@ function StudentJobsPage() {
       setApplicationSchema(formConfig);
       setApplicationForm(nextForm);
       setScreeningAnswers({});
-      setResumeFile(null);
+      setApplicationFiles({});
+      setScreeningFiles({});
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to load this application form.');
     } finally {
@@ -114,25 +129,28 @@ function StudentJobsPage() {
       payload.append('submittedFields', JSON.stringify((applicationSchema.job?.applicationFormFields || []).map((field) => ({
           fieldKey: field.key,
           label: field.label,
-          type:
-            field.key === 'email'
-              ? 'EMAIL'
-              : field.key === 'contactNumber'
-                ? 'PHONE'
-                : field.key === 'resume'
-                  ? 'FILE'
-                  : 'TEXT',
-          value: applicationForm[field.key] ?? '',
+          type: inferApplicationFieldType(field),
+          value: inferApplicationFieldType(field) === 'FILE_UPLOAD' ? applicationFiles[field.key]?.name || '' : applicationForm[field.key] ?? '',
         }))));
       payload.append('screeningAnswers', JSON.stringify((applicationSchema.job?.screeningQuestions || []).map((question) => ({
           questionId: question.questionId,
           question: question.question,
-          type: question.type,
-          answer: screeningAnswers[question.questionId] ?? '',
+          type: inferScreeningQuestionType(question),
+          answer: inferScreeningQuestionType(question) === 'FILE_UPLOAD' ? screeningFiles[question.questionId]?.name || '' : screeningAnswers[question.questionId] ?? '',
         }))));
-      if (resumeFile) {
-        payload.append('resume', resumeFile);
+      if (applicationFiles.resume) {
+        payload.append('resume', applicationFiles.resume);
       }
+      Object.entries(applicationFiles).forEach(([fieldKey, file]) => {
+        if (fieldKey !== 'resume' && file) {
+          payload.append(`field_${fieldKey}`, file);
+        }
+      });
+      Object.entries(screeningFiles).forEach(([questionId, file]) => {
+        if (file) {
+          payload.append(`screening_${questionId}`, file);
+        }
+      });
 
       await api.post('/students/applications', payload, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -143,12 +161,137 @@ function StudentJobsPage() {
       setApplicationSchema(null);
       setApplicationForm({});
       setScreeningAnswers({});
-      setResumeFile(null);
+      setApplicationFiles({});
+      setScreeningFiles({});
+      refreshNotifications?.();
+      emitActivityRefresh({ scope: 'student', action: 'application.created', jobId: selectedJob.jobId });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to apply for this job.');
     } finally {
       setApplyingJobId('');
     }
+  }
+
+  function updateApplicationValue(fieldKey, value) {
+    setApplicationForm((current) => ({ ...current, [fieldKey]: value }));
+  }
+
+  function updateApplicationFile(fieldKey, file) {
+    setApplicationFiles((current) => ({ ...current, [fieldKey]: file || null }));
+  }
+
+  function updateScreeningValue(questionId, value) {
+    setScreeningAnswers((current) => ({ ...current, [questionId]: value }));
+  }
+
+  function updateScreeningFile(questionId, file) {
+    setScreeningFiles((current) => ({ ...current, [questionId]: file || null }));
+  }
+
+  function renderFieldInput(field) {
+    const fieldType = inferApplicationFieldType(field);
+
+    if (fieldType === 'FILE_UPLOAD') {
+      return (
+        <>
+          <input
+            type="file"
+            accept=".pdf,.docx"
+            onChange={(event) => updateApplicationFile(field.key, event.target.files?.[0] || null)}
+          />
+          {applicationFiles[field.key] ? <small>{applicationFiles[field.key].name}</small> : null}
+        </>
+      );
+    }
+
+    if (fieldType === 'NUMBER') {
+      return (
+        <input
+          type="number"
+          min="0"
+          max={field.key === 'cgpa' ? '10' : undefined}
+          step={field.key === 'cgpa' ? '0.1' : '1'}
+          value={applicationForm[field.key] || ''}
+          onChange={(event) => updateApplicationValue(field.key, event.target.value)}
+          placeholder={field.placeholder || field.label}
+        />
+      );
+    }
+
+    if (fieldType === 'TEXTAREA') {
+      return (
+        <textarea
+          rows={field.key === 'educationDetails' ? 4 : 3}
+          value={applicationForm[field.key] || ''}
+          onChange={(event) => updateApplicationValue(field.key, event.target.value)}
+          placeholder={field.placeholder || field.label}
+        />
+      );
+    }
+
+    return (
+      <input
+        type={fieldType === 'EMAIL' ? 'email' : fieldType === 'URL' ? 'url' : fieldType === 'PHONE' ? 'tel' : 'text'}
+        value={applicationForm[field.key] || ''}
+        onChange={(event) => updateApplicationValue(field.key, event.target.value)}
+        placeholder={field.placeholder || field.label}
+      />
+    );
+  }
+
+  function renderQuestionInput(question) {
+    const questionType = inferScreeningQuestionType(question);
+
+    if (questionType === 'YES_NO') {
+      return (
+        <select
+          value={screeningAnswers[question.questionId] || ''}
+          onChange={(event) => updateScreeningValue(question.questionId, event.target.value)}
+        >
+          <option value="">Select an answer</option>
+          <option value="YES">Yes</option>
+          <option value="NO">No</option>
+        </select>
+      );
+    }
+
+    if (questionType === 'SINGLE_CHOICE') {
+      return (
+        <select
+          value={screeningAnswers[question.questionId] || ''}
+          onChange={(event) => updateScreeningValue(question.questionId, event.target.value)}
+        >
+          <option value="">Select an option</option>
+          {(question.options || []).map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (questionType === 'FILE_UPLOAD') {
+      return (
+        <>
+          <input
+            type="file"
+            accept=".pdf,.docx"
+            onChange={(event) => updateScreeningFile(question.questionId, event.target.files?.[0] || null)}
+          />
+          {screeningFiles[question.questionId] ? <small>{screeningFiles[question.questionId].name}</small> : null}
+        </>
+      );
+    }
+
+    return (
+      <input
+        type={questionType === 'URL' ? 'url' : 'text'}
+        value={screeningAnswers[question.questionId] || ''}
+        onChange={(event) => updateScreeningValue(question.questionId, event.target.value)}
+        placeholder={`Answer (${questionType})`}
+      />
+    );
   }
 
   return (
@@ -165,10 +308,10 @@ function StudentJobsPage() {
 
       {loading ? (
         <div className="screen-center">Loading job postings...</div>
-      ) : filteredJobs.length ? (
+      ) : jobs.length ? (
         <>
           <section className="jobs-grid">
-            {filteredJobs.map((job) => (
+            {jobs.map((job) => (
               <JobCard
                 key={job._id}
                 job={job}
@@ -202,7 +345,8 @@ function StudentJobsPage() {
                 setApplicationSchema(null);
                 setApplicationForm({});
                 setScreeningAnswers({});
-                setResumeFile(null);
+                setApplicationFiles({});
+                setScreeningFiles({});
               }}
               title={`Apply to ${selectedJob.title || selectedJob.role}`}
               subtitle={selectedJob.companyName || 'Campus Partner'}
@@ -274,70 +418,14 @@ function StudentJobsPage() {
                     {(applicationSchema.job?.applicationFormFields || []).map((field) => (
                       <label key={field.key} className={field.key === 'resume' ? 'full-width' : ''}>
                         {field.label}{field.mode === 'MANDATORY' ? ' *' : ''}
-                        {field.key === 'resume' ? (
-                          <input
-                            type="file"
-                            accept=".pdf,.doc,.docx"
-                            onChange={(event) => setResumeFile(event.target.files?.[0] || null)}
-                          />
-                        ) : field.key === 'cgpa' ? (
-                          <input
-                            type="number"
-                            min="0"
-                            max="10"
-                            step="0.1"
-                            value={applicationForm[field.key] || ''}
-                            onChange={(event) => setApplicationForm((current) => ({ ...current, [field.key]: event.target.value }))}
-                            placeholder={field.placeholder || field.label}
-                          />
-                        ) : field.key === 'educationDetails' || field.key === 'skills' ? (
-                          <textarea
-                            rows={field.key === 'educationDetails' ? 4 : 3}
-                            value={applicationForm[field.key] || ''}
-                            onChange={(event) => setApplicationForm((current) => ({ ...current, [field.key]: event.target.value }))}
-                            placeholder={field.placeholder || field.label}
-                          />
-                        ) : (
-                          <input
-                            value={applicationForm[field.key] || ''}
-                            onChange={(event) => setApplicationForm((current) => ({ ...current, [field.key]: event.target.value }))}
-                            placeholder={field.placeholder || field.label}
-                          />
-                        )}
+                        {renderFieldInput(field)}
                       </label>
                     ))}
 
                     {(applicationSchema.job?.screeningQuestions || []).map((question) => (
                       <label className="full-width" key={question.questionId}>
                         {question.question}{question.required ? ' *' : ''}
-                        {question.type === 'YES_NO' ? (
-                          <select
-                            value={screeningAnswers[question.questionId] || ''}
-                            onChange={(event) => setScreeningAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))}
-                          >
-                            <option value="">Select an answer</option>
-                            <option value="YES">Yes</option>
-                            <option value="NO">No</option>
-                          </select>
-                        ) : question.type === 'SINGLE_CHOICE' ? (
-                          <select
-                            value={screeningAnswers[question.questionId] || ''}
-                            onChange={(event) => setScreeningAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))}
-                          >
-                            <option value="">Select an option</option>
-                            {(question.options || []).map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            value={screeningAnswers[question.questionId] || ''}
-                            onChange={(event) => setScreeningAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))}
-                            placeholder={`Answer (${question.type})`}
-                          />
-                        )}
+                        {renderQuestionInput(question)}
                       </label>
                     ))}
 

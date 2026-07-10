@@ -39,7 +39,7 @@ router.post('/resume', authenticateToken, requireRole('STUDENT'), uploadActionLi
 router.get('/resume-url', authenticateToken, requireRole('STUDENT'), getResumeUrl);
 router.get('/jobs', authenticateToken, requireRole('STUDENT'), listJobs);
 router.get('/jobs/:jobId/form', authenticateToken, requireRole('STUDENT'), getJobApplicationForm);
-router.post('/applications', authenticateToken, requireRole('STUDENT'), uploadActionLimiter, upload.single('resume'), body('jobId').isString().notEmpty(), validate, applyJob);
+router.post('/applications', authenticateToken, requireRole('STUDENT'), uploadActionLimiter, upload.any(), body('jobId').isString().notEmpty(), validate, applyJob);
 router.get('/applications/my', authenticateToken, requireRole('STUDENT'), myApplications);
 router.patch('/applications/:id/withdraw', authenticateToken, requireRole('STUDENT'), validate, withdrawApplication);
 router.delete('/applications/:id', authenticateToken, requireRole('STUDENT'), deleteOwnApplication);

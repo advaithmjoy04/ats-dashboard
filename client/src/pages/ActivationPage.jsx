@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
+import PasswordInput from '../components/PasswordInput';
+import PasswordRequirements from '../components/PasswordRequirements';
 import { useTenant } from '../state/TenantContext';
 import { getTenantAwarePath } from '../utils/tenantRouting';
+import { getConfirmPasswordError, isPasswordValid } from '../utils/passwordValidation';
 
 function ActivationPage() {
   const { tenant } = useTenant();
@@ -13,16 +16,14 @@ function ActivationPage() {
   const tenantHint = tenantSlug || params.get('tenant') || tenant.slug || '';
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPasswordRules, setShowPasswordRules] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const passwordError = password && password.length < 8 ? 'Password must be at least 8 characters.' : '';
-  const confirmError = confirmPassword && password !== confirmPassword ? 'Passwords do not match.' : '';
+  const confirmError = getConfirmPasswordError(password, confirmPassword);
 
   const canSubmit = useMemo(
-    () => token && password.length >= 8 && password === confirmPassword,
+    () => token && isPasswordValid(password) && password === confirmPassword,
     [token, password, confirmPassword]
   );
 
@@ -56,50 +57,28 @@ function ActivationPage() {
         {message ? <div className="success-banner">{message}</div> : null}
         {error ? <div className="error-banner">{error}</div> : null}
         <form className="login-form" onSubmit={handleSubmit}>
-          <label>
-            New password
-            <div className="password-field">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Minimum 8 characters"
-                minLength={8}
-                required
-              />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword((current) => !current)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            {passwordError ? <small className="field-error">{passwordError}</small> : null}
-          </label>
-          <label>
-            Confirm password
-            <div className="password-field">
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Re-enter your password"
-                minLength={8}
-                required
-              />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowConfirmPassword((current) => !current)}
-                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-              >
-                {showConfirmPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            {confirmError ? <small className="field-error">{confirmError}</small> : null}
-          </label>
+          <div className="full-width password-group">
+            <PasswordInput
+              label="New password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              onFocus={() => setShowPasswordRules(true)}
+              onBlur={() => setShowPasswordRules(Boolean(password))}
+              placeholder="Create a strong password"
+              autoComplete="new-password"
+              required
+            />
+            <PasswordRequirements password={password} visible={showPasswordRules || Boolean(password)} />
+          </div>
+          <PasswordInput
+            label="Confirm password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            placeholder="Re-enter your password"
+            autoComplete="new-password"
+            required
+            error={confirmError}
+          />
           <button type="submit" className="primary-button" disabled={!canSubmit || submitting}>
             {submitting ? 'Activating...' : 'Activate Account'}
           </button>

@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import api from '../api/client';
 import CreateJobModal from '../components/CreateJobModal';
 import JobCard from '../components/JobCard';
+import { emitActivityRefresh } from '../utils/activitySignals';
 
 function RecruiterJobsPage() {
   const { search } = useOutletContext();
@@ -66,6 +67,7 @@ function RecruiterJobsPage() {
       setModalOpen(false);
       setMessage('Job created successfully');
       await loadJobs();
+      emitActivityRefresh({ scope: 'recruiter', action: 'job.created' });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to create recruiter job.');
     } finally {

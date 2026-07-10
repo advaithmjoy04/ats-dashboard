@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const APPLICATION_STATUSES = ['APPLIED', 'SHORTLISTED', 'REJECTED', 'SELECTED', 'WITHDRAWN'];
-const APPLICATION_FIELD_TYPES = ['TEXT', 'EMAIL', 'PHONE', 'NUMBER', 'TEXTAREA', 'URL', 'FILE', 'YES_NO', 'SINGLE_CHOICE'];
+const APPLICATION_FIELD_TYPES = ['TEXT', 'EMAIL', 'PHONE', 'NUMBER', 'TEXTAREA', 'URL', 'FILE', 'FILE_UPLOAD', 'YES_NO', 'SINGLE_CHOICE'];
 
 const applicationFieldAnswerSchema = new Schema(
   {

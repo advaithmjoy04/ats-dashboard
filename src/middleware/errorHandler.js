@@ -1,8 +1,14 @@
 const AppError = require('../utils/AppError');
 
 module.exports = (err, req, res, next) => {
-  const statusCode = err.statusCode || 500;
-  const message = err.isOperational ? err.message : 'Internal Server Error';
+  let statusCode = err.statusCode || 500;
+  let message = err.isOperational ? err.message : 'Internal Server Error';
+
+  if (err.name === 'TokenExpiredError' || err.name === 'JsonWebTokenError') {
+    statusCode = 401;
+    err.isOperational = true;
+    message = err.name === 'TokenExpiredError' ? 'Access token expired' : 'Invalid access token';
+  }
   const logParts = [
     `[${new Date().toISOString()}]`,
     req?.method || 'UNKNOWN',

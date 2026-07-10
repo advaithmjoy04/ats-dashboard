@@ -6,6 +6,7 @@ const JOB_VISIBILITY = ['INTERNAL', 'EXTERNAL'];
 const JOB_WORK_MODES = ['IN_OFFICE', 'HYBRID', 'REMOTE'];
 const SALARY_PERIODS = ['HOURLY', 'MONTHLY', 'ANNUAL'];
 const FORM_FIELD_MODES = ['MANDATORY', 'OPTIONAL', 'OFF'];
+const APPLICATION_FIELD_TYPES = ['TEXT', 'EMAIL', 'PHONE', 'NUMBER', 'TEXTAREA', 'URL', 'FILE_UPLOAD'];
 const SCREENING_QUESTION_TYPES = ['TEXT', 'YES_NO', 'SINGLE_CHOICE', 'FILE_UPLOAD', 'URL'];
 
 const jobLocationSchema = new Schema(
@@ -43,6 +44,7 @@ const applicationFieldSchema = new Schema(
     key: { type: String, required: true, trim: true },
     label: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: '' },
+    type: { type: String, enum: APPLICATION_FIELD_TYPES, default: 'TEXT' },
     mode: { type: String, enum: FORM_FIELD_MODES, default: 'OPTIONAL' },
     placeholder: { type: String, trim: true, default: '' },
     helpText: { type: String, trim: true, default: '' },

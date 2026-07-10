@@ -3,9 +3,12 @@ import { useOutletContext, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import CandidateDetailPanel from '../components/CandidateDetailPanel';
 import PipelineBoard from '../components/PipelineBoard';
+import StatCard from '../components/StatCard';
+import { emitActivityRefresh } from '../utils/activitySignals';
+import { formatPercent } from '../utils/formatters';
 
 function RecruiterCandidatesPage() {
-  const { search } = useOutletContext();
+  const { search, setSearch, debouncedSearch } = useOutletContext();
   const [params, setParams] = useSearchParams();
   const [jobs, setJobs] = useState([]);
   const [activeJob, setActiveJob] = useState(null);
@@ -36,13 +39,12 @@ function RecruiterCandidatesPage() {
         const recruiterJobs = jobsResponse.data.items || [];
         const activeJobId = selectedJobId || recruiterJobs[0]?.jobId || '';
         let applicants = [];
-        let activeJob = null;
+        const activeJob = recruiterJobs.find((job) => job.jobId === activeJobId) || null;
         if (activeJobId) {
-          const candidatesResponse = await api.get(`/recruiters/jobs/${activeJobId}/applicants`, {
-            params: { limit: 100 },
+          const candidatesResponse = await api.get('/search', {
+            params: { limit: 100, search: debouncedSearch, jobId: activeJobId },
           });
           applicants = candidatesResponse.data.items || [];
-          activeJob = candidatesResponse.data.job || null;
         }
 
         if (!ignore) {
@@ -70,7 +72,7 @@ function RecruiterCandidatesPage() {
     return () => {
       ignore = true;
     };
-  }, [selectedJobId, setParams]);
+  }, [selectedJobId, setParams, debouncedSearch]);
 
   useEffect(() => {
     if (prioritySkillFilter !== 'ALL' && !availablePrioritySkills.includes(prioritySkillFilter)) {
@@ -85,25 +87,7 @@ function RecruiterCandidatesPage() {
   }, [availableCandidateSkills, skillFilter]);
 
   const filteredCandidates = useMemo(() => {
-    const query = String(search || '').toLowerCase();
     const next = candidates.filter((candidate) => {
-      const matchesSearch = !query || [
-        candidate.student?.fullName,
-        candidate.student?.email,
-        candidate.student?.usn,
-        candidate.student?.branch,
-        candidate.job?.role,
-        candidate.job?.companyName,
-        candidate.job?.jobId,
-        candidate.currentStageLabel,
-        ...(candidate.skillMatch?.matchedSkills || []),
-        ...(candidate.skillMatch?.matchedPrioritySkills || []),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(query);
-
       const matchesPrioritySkill = prioritySkillFilter === 'ALL'
         || candidate.skillMatch?.matchedPrioritySkills?.includes(prioritySkillFilter);
 
@@ -113,7 +97,7 @@ function RecruiterCandidatesPage() {
       const matchesLevel = matchFilter === 'ALL'
         || (candidate.skillMatch?.matchLevel || 'NONE') === matchFilter;
 
-      return matchesSearch && matchesPrioritySkill && matchesEnteredSkill && matchesLevel;
+      return matchesPrioritySkill && matchesEnteredSkill && matchesLevel;
     });
 
     next.sort((left, right) => {
@@ -129,7 +113,17 @@ function RecruiterCandidatesPage() {
     });
 
     return next;
-  }, [candidates, search, prioritySkillFilter, matchFilter, sortBy]);
+  }, [candidates, prioritySkillFilter, skillFilter, matchFilter, sortBy]);
+
+  const stageCounts = useMemo(
+    () =>
+      filteredCandidates.reduce((summary, candidate) => {
+        const key = candidate.currentStageKey || 'applied';
+        summary[key] = (summary[key] || 0) + 1;
+        return summary;
+      }, {}),
+    [filteredCandidates]
+  );
 
   useEffect(() => {
     setSelectedCandidate((current) =>
@@ -164,6 +158,7 @@ function RecruiterCandidatesPage() {
         stageKey: nextStage.stageKey,
       });
       setMessage(`Moved ${currentCandidate.student?.fullName || currentCandidate.student?.email} to ${nextStage.label.toLowerCase()}.`);
+      emitActivityRefresh({ scope: 'recruiter', action: 'candidate.stage.updated', applicationId: candidateId });
     } catch (err) {
       setCandidates(previousCandidates);
       setError(err.response?.data?.message || 'Unable to update candidate status.');
@@ -193,6 +188,7 @@ function RecruiterCandidatesPage() {
       );
       setSelectedCandidate(updatedCandidate);
       setMessage(`Saved feedback for ${selectedCandidate.student?.fullName || selectedCandidate.student?.email}.`);
+      emitActivityRefresh({ scope: 'recruiter', action: 'candidate.feedback.saved', applicationId: selectedCandidate.id });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to save candidate feedback.');
     } finally {
@@ -205,46 +201,9 @@ function RecruiterCandidatesPage() {
       <section className="toolbar">
         <div>
           <h2 className="page-title">Candidates</h2>
-          <p className="page-description">Review applicants for your assigned roles by pipeline stage.</p>
+          <p className="page-description">Review applicants for your assigned roles with recruiter-safe pipeline controls and match filters.</p>
         </div>
-        <div className="toolbar-actions">
-          <select value={selectedJobId} onChange={(event) => setParams(event.target.value ? { jobId: event.target.value } : {})}>
-            {jobs.length ? null : <option value="">No assigned jobs</option>}
-            {jobs.map((job) => (
-              <option key={job._id} value={job.jobId}>
-                {job.companyName} - {job.title || job.role}
-              </option>
-            ))}
-          </select>
-          <select value={prioritySkillFilter} onChange={(event) => setPrioritySkillFilter(event.target.value)}>
-            <option value="ALL">All Priority Skills</option>
-            {availablePrioritySkills.map((skill) => (
-              <option key={skill} value={skill}>
-                Priority: {skill}
-              </option>
-            ))}
-          </select>
-          <select value={skillFilter} onChange={(event) => setSkillFilter(event.target.value)}>
-            <option value="ALL">All Entered Skills</option>
-            {availableCandidateSkills.map((skill) => (
-              <option key={skill} value={skill}>
-                Skill: {skill}
-              </option>
-            ))}
-          </select>
-          <select value={matchFilter} onChange={(event) => setMatchFilter(event.target.value)}>
-            <option value="ALL">All Match Levels</option>
-            <option value="HIGH">High Match</option>
-            <option value="MEDIUM">Medium Match</option>
-            <option value="LOW">Low Match</option>
-            <option value="NONE">No Match</option>
-          </select>
-          <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-            <option value="BEST_MATCH">Best Match</option>
-            <option value="RECENT">Most Recent</option>
-            <option value="NAME">Candidate Name</option>
-          </select>
-        </div>
+        <div className="summary-pill">Visible Candidates: {filteredCandidates.length}</div>
       </section>
 
       {message ? <div className="success-banner">{message}</div> : null}
@@ -253,6 +212,94 @@ function RecruiterCandidatesPage() {
         <div className="screen-center">Loading candidates...</div>
       ) : selectedJobId ? (
         <>
+          <section className="stats-grid">
+            <StatCard
+              title="Visible Candidates"
+              value={filteredCandidates.length}
+              percent={formatPercent(filteredCandidates.length, filteredCandidates.length || 1)}
+              tone="applied"
+            />
+            <StatCard
+              title="Applied"
+              value={stageCounts.applied || 0}
+              percent={formatPercent(stageCounts.applied || 0, filteredCandidates.length)}
+              tone="applied"
+            />
+            <StatCard
+              title="Interview"
+              value={stageCounts.interview || 0}
+              percent={formatPercent(stageCounts.interview || 0, filteredCandidates.length)}
+              tone="shortlisted"
+            />
+          </section>
+
+          <section className="panel">
+            <div className="candidate-directory-shell">
+              <div className="candidate-directory-copy">
+                <span className="eyebrow">Recruiter View</span>
+                <h3>{activeJob?.title || activeJob?.role || 'Assigned Role'}</h3>
+                <p className="page-description">
+                  Only candidates for your assigned job are visible here. Open any card to review the submitted form, resume, and student-facing feedback.
+                </p>
+              </div>
+              <div className="candidate-directory-stats">
+                <article className="candidate-stat-card">
+                  <span>Priority Skills</span>
+                  <strong>{availablePrioritySkills.length}</strong>
+                </article>
+                <article className="candidate-stat-card">
+                  <span>Visible</span>
+                  <strong>{filteredCandidates.length}</strong>
+                </article>
+              </div>
+            </div>
+          </section>
+          <section className="filters-bar">
+            <select value={selectedJobId} onChange={(event) => setParams(event.target.value ? { jobId: event.target.value } : {})}>
+              {jobs.length ? null : <option value="">No assigned jobs</option>}
+              {jobs.map((job) => (
+                <option key={job._id} value={job.jobId}>
+                  {job.companyName} - {job.title || job.role}
+                </option>
+              ))}
+            </select>
+            <select value={matchFilter} onChange={(event) => setMatchFilter(event.target.value)}>
+              <option value="ALL">All Match Levels</option>
+              <option value="HIGH">High Match</option>
+              <option value="MEDIUM">Medium Match</option>
+              <option value="LOW">Low Match</option>
+              <option value="NONE">No Match</option>
+            </select>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by candidate, USN, job title, or company"
+            />
+          </section>
+          <section className="toolbar-actions">
+            <select value={prioritySkillFilter} onChange={(event) => setPrioritySkillFilter(event.target.value)}>
+              <option value="ALL">All Priority Skills</option>
+              {availablePrioritySkills.map((skill) => (
+                <option key={skill} value={skill}>
+                  Priority: {skill}
+                </option>
+              ))}
+            </select>
+            <select value={skillFilter} onChange={(event) => setSkillFilter(event.target.value)}>
+              <option value="ALL">All Entered Skills</option>
+              {availableCandidateSkills.map((skill) => (
+                <option key={skill} value={skill}>
+                  Skill: {skill}
+                </option>
+              ))}
+            </select>
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+              <option value="BEST_MATCH">Best Match</option>
+              <option value="RECENT">Most Recent</option>
+              <option value="NAME">Candidate Name</option>
+            </select>
+          </section>
           <PipelineBoard
             candidates={filteredCandidates}
             stages={activeJob?.hiringStages || []}

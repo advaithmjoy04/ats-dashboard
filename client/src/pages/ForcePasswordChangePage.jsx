@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PasswordInput from '../components/PasswordInput';
+import PasswordRequirements from '../components/PasswordRequirements';
 import { useAuth } from '../state/AuthContext';
 import { useTenant } from '../state/TenantContext';
 import { getHomeRoute } from '../utils/routing';
+import { getConfirmPasswordError, isPasswordValid } from '../utils/passwordValidation';
 
 function ForcePasswordChangePage() {
   const { tenant } = useTenant();
@@ -10,12 +13,14 @@ function ForcePasswordChangePage() {
   const navigate = useNavigate();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswordRules, setShowPasswordRules] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const confirmError = getConfirmPasswordError(newPassword, confirmPassword);
 
   const canSubmit = useMemo(
-    () => newPassword.length >= 8 && newPassword === confirmPassword,
+    () => isPasswordValid(newPassword) && newPassword === confirmPassword,
     [newPassword, confirmPassword]
   );
 
@@ -46,14 +51,28 @@ function ForcePasswordChangePage() {
         {message ? <div className="success-banner">{message}</div> : null}
         {error ? <div className="error-banner">{error}</div> : null}
         <form className="login-form" onSubmit={handleSubmit}>
-          <label>
-            New password
-            <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} required />
-          </label>
-          <label>
-            Confirm password
-            <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} required />
-          </label>
+          <div className="full-width password-group">
+            <PasswordInput
+              label="New password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              onFocus={() => setShowPasswordRules(true)}
+              onBlur={() => setShowPasswordRules(Boolean(newPassword))}
+              placeholder="Create a strong password"
+              autoComplete="new-password"
+              required
+            />
+            <PasswordRequirements password={newPassword} visible={showPasswordRules || Boolean(newPassword)} />
+          </div>
+          <PasswordInput
+            label="Confirm password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            placeholder="Re-enter your password"
+            autoComplete="new-password"
+            required
+            error={confirmError}
+          />
           <button type="submit" className="primary-button" disabled={!canSubmit || submitting}>
             {submitting ? 'Updating...' : 'Update Password'}
           </button>

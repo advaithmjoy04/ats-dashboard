@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import api from '../api/client';
+import PasswordInput from '../components/PasswordInput';
+import PasswordRequirements from '../components/PasswordRequirements';
 import { getTenantAwarePath } from '../utils/tenantRouting';
 import PopupShell from '../components/PopupShell';
+import { isPasswordValid } from '../utils/passwordValidation';
 
 const initialForm = {
   id: '',
@@ -88,6 +91,28 @@ function PlatformTenantsPage() {
   const [adminFieldErrors, setAdminFieldErrors] = useState({});
   const [message, setMessage] = useState('');
   const [formOpen, setFormOpen] = useState(false);
+  const [showFirstAdminPasswordRules, setShowFirstAdminPasswordRules] = useState(false);
+  const [showAdditionalAdminPasswordRules, setShowAdditionalAdminPasswordRules] = useState(false);
+
+  const isFirstAdminPasswordValid = !form.adminPassword || isPasswordValid(form.adminPassword);
+  const isAdditionalAdminPasswordValid = !adminForm.password || isPasswordValid(adminForm.password);
+  const canSubmitInstitute = useMemo(
+    () =>
+      Boolean(form.name.trim()) &&
+      isFirstAdminPasswordValid &&
+      (!form.id
+        ? Boolean(form.adminFullName.trim()) && Boolean(form.adminEmail.trim())
+        : true),
+    [form, isFirstAdminPasswordValid]
+  );
+  const canSubmitAdditionalAdmin = useMemo(
+    () =>
+      Boolean(form.id) &&
+      Boolean(adminForm.fullName.trim()) &&
+      Boolean(adminForm.email.trim()) &&
+      isAdditionalAdminPasswordValid,
+    [adminForm, form.id, isAdditionalAdminPasswordValid]
+  );
 
   async function loadTenants() {
     const response = await api.get('/platform/tenants');
@@ -190,6 +215,8 @@ function PlatformTenantsPage() {
     setFieldErrors({});
     setAdminFieldErrors({});
     setFormOpen(true);
+    setShowFirstAdminPasswordRules(false);
+    setShowAdditionalAdminPasswordRules(false);
 
     try {
       await loadTenantAdmins(tenant._id);
@@ -205,6 +232,8 @@ function PlatformTenantsPage() {
     setFieldErrors({});
     setAdminFieldErrors({});
     setFormOpen(false);
+    setShowFirstAdminPasswordRules(false);
+    setShowAdditionalAdminPasswordRules(false);
   }
 
   async function handleSubmit(event) {
@@ -275,8 +304,8 @@ function PlatformTenantsPage() {
     setAdminFieldErrors({});
 
     const nextFieldErrors = {};
-    if (adminForm.password && adminForm.password.length < 8) {
-      nextFieldErrors.password = 'Temporary password must be at least 8 characters.';
+    if (adminForm.password && !isPasswordValid(adminForm.password)) {
+      nextFieldErrors.password = 'Temporary password must include uppercase, lowercase, number, special character, and be at least 8 characters.';
     }
     if (adminForm.username && adminForm.username.length < 3) {
       nextFieldErrors.username = 'Username must be at least 3 characters.';
@@ -537,14 +566,26 @@ function PlatformTenantsPage() {
                     <input name="adminUsername" value={form.adminUsername} onChange={handleChange} placeholder="mite.admin" />
                     {fieldErrors.adminUsername ? <small className="field-error">{fieldErrors.adminUsername}</small> : null}
                   </label>
-                  <label>
-                    Temporary password
-                    <input name="adminPassword" type="password" value={form.adminPassword} onChange={handleChange} placeholder="Minimum 8 characters" />
-                    {fieldErrors.adminPassword ? <small className="field-error">{fieldErrors.adminPassword}</small> : null}
-                  </label>
+                  <div className="password-group">
+                    <PasswordInput
+                      label="Temporary password"
+                      name="adminPassword"
+                      value={form.adminPassword}
+                      onChange={handleChange}
+                      onFocus={() => setShowFirstAdminPasswordRules(true)}
+                      onBlur={() => setShowFirstAdminPasswordRules(Boolean(form.adminPassword))}
+                      placeholder="Optional strong temporary password"
+                      autoComplete="new-password"
+                      error={fieldErrors.adminPassword}
+                    />
+                    <PasswordRequirements
+                      password={form.adminPassword}
+                      visible={showFirstAdminPasswordRules || Boolean(form.adminPassword)}
+                    />
+                  </div>
                 </>
               ) : null}
-              <button type="submit" className="primary-button full-width" disabled={saving}>
+              <button type="submit" className="primary-button full-width" disabled={saving || !canSubmitInstitute}>
                 {saving ? (form.id ? 'Saving...' : 'Creating...') : (form.id ? 'Save Institute' : 'Create Institute')}
               </button>
               {form.id ? (
@@ -579,15 +620,27 @@ function PlatformTenantsPage() {
                   <input name="username" value={adminForm.username} onChange={handleAdminChange} placeholder="mite.admin2" />
                   {adminFieldErrors.username ? <small className="field-error">{adminFieldErrors.username}</small> : null}
                 </label>
-                <label>
-                  Temporary password
-                  <input name="password" type="password" value={adminForm.password} onChange={handleAdminChange} placeholder="Optional" />
-                  {adminFieldErrors.password ? <small className="field-error">{adminFieldErrors.password}</small> : null}
-                </label>
+                <div className="password-group">
+                  <PasswordInput
+                    label="Temporary password"
+                    name="password"
+                    value={adminForm.password}
+                    onChange={handleAdminChange}
+                    onFocus={() => setShowAdditionalAdminPasswordRules(true)}
+                    onBlur={() => setShowAdditionalAdminPasswordRules(Boolean(adminForm.password))}
+                    placeholder="Optional strong temporary password"
+                    autoComplete="new-password"
+                    error={adminFieldErrors.password}
+                  />
+                  <PasswordRequirements
+                    password={adminForm.password}
+                    visible={showAdditionalAdminPasswordRules || Boolean(adminForm.password)}
+                  />
+                </div>
                 <button
                   type="submit"
                   className="primary-button full-width"
-                  disabled={adminSaving || !selectedTenant?.isActive}
+                  disabled={adminSaving || !selectedTenant?.isActive || !canSubmitAdditionalAdmin}
                 >
                   {adminSaving ? 'Adding Admin...' : 'Add Admin'}
                 </button>

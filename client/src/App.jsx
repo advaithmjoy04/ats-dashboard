@@ -67,7 +67,7 @@ const platformNavItems = [
 
 function HomeRedirect() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute loginPath="/platform/login">
       <NavigateToRoleHome />
     </ProtectedRoute>
   );

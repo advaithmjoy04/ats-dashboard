@@ -1,4 +1,4 @@
-const { Application, Job, StudentProfile, User } = require('../models');
+const { Application, Job, User } = require('../models');
 const {
   APPLICATION_STATUSES,
   createAuditLog,
@@ -15,10 +15,21 @@ const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { getRequestOrigin } = require('../utils/requestOrigin');
 const { sendData, sendMessage } = require('../utils/response');
+const { getRequestTenantId } = require('../utils/tenantScope');
 const config = require('../config');
 
 const listJobs = catchAsync(async (req, res) => {
-  const result = await paginate(Job, { tenantId: req.user.tenantId, assignedRecruiters: req.user.id }, { page: req.query.page, limit: req.query.limit });
+  const result = await paginate(
+    Job,
+    {
+      tenantId: req.user.tenantId,
+      $or: [
+        { postedBy: req.user.id },
+        { assignedRecruiters: req.user.id },
+      ],
+    },
+    { page: req.query.page, limit: req.query.limit }
+  );
   return sendData(res, 200, result);
 });
 
@@ -26,7 +37,7 @@ const createJob = catchAsync(async (req, res) => {
   const job = await createRecruiterOwnedJob(req.user.id, {
     ...req.body,
     assignedRecruiters: [req.user.id],
-    tenantId: req.tenant?.id,
+    tenantId: getRequestTenantId(req, { allowPlatformSuperAdmin: false }),
   });
   await createAuditLog({
     req,
@@ -150,14 +161,11 @@ const updateApplication = catchAsync(async (req, res, next) => {
       mappedStatus: application.status,
     },
   });
-  const [studentUser, profile] = await Promise.all([
-    User.findOne({ _id: application.studentId, tenantId: req.user.tenantId }),
-    StudentProfile.findOne({ userId: application.studentId, tenantId: req.user.tenantId }),
-  ]);
+  const studentUser = await User.findOne({ _id: application.studentId, tenantId: req.user.tenantId });
   if (studentUser) {
     await sendApplicationStatusUpdate({
       email: studentUser.email,
-      fullName: profile?.fullName || studentUser.fullName || studentUser.email,
+      fullName: studentUser.fullName || studentUser.email,
       jobTitle: job.title,
       companyName: job.companyName,
       status: application.status,

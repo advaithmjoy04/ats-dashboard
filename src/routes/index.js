@@ -8,6 +8,7 @@ const jobRoutes = require('./jobs');
 const applicationRoutes = require('./applications');
 const tenantRoutes = require('./tenant');
 const platformAdminRoutes = require('./platformAdmin');
+const searchRoutes = require('./search');
 
 router.use('/auth', authRoutes);
 router.use('/tenant', tenantRoutes);
@@ -17,5 +18,6 @@ router.use('/students', studentRoutes);
 router.use('/recruiters', recruiterRoutes);
 router.use('/jobs', jobRoutes);
 router.use('/applications', applicationRoutes);
+router.use('/search', searchRoutes);
 
 module.exports = router;

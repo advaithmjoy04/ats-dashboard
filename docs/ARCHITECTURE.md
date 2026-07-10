@@ -32,6 +32,7 @@ It handles:
 * student applications
 * email invitations and notifications
 * audit logging
+* centralized password validation and hashing
 
 ## Data Layer
 
@@ -82,6 +83,7 @@ Related auth flows follow the same tenant-specific pathing:
 * `/t/{tenantSlug}/forgot-password`
 * `/t/{tenantSlug}/reset-password`
 * `/t/{tenantSlug}/activate`
+* `/force-password-change`
 
 This ensures that:
 
@@ -89,6 +91,27 @@ This ensures that:
 * tenant branding is loaded correctly before authentication
 * activation and reset links land in the correct institute directory
 * cross-institute login confusion is reduced
+
+## Password UX and Validation
+
+Authentication screens use a reusable password input component with a visibility toggle so the same interaction pattern is shared across institute login, platform login, activation, reset password, and forced password-change screens.
+
+When a user is setting a new password, the UI shows progressive rule feedback only when the field is focused or typed into.
+
+Required password rules:
+
+* minimum 8 characters
+* at least 1 uppercase letter
+* at least 1 lowercase letter
+* at least 1 number
+* at least 1 special character
+
+Validation is intentionally duplicated in both layers:
+
+* frontend: immediate UX feedback, confirm-password checks, disabled submit until valid
+* backend: final enforcement through centralized validation before hashing and storage
+
+Passwords are hashed with `bcrypt` and never stored in plain text.
 
 ---
 
@@ -149,10 +172,11 @@ Can:
 
 Updated behavior:
 
-* instead of maintaining one reusable student profile for all jobs, the student fills the required details as part of the application flow
-* this behaves like a form submission for each job
+* the active ATS flow no longer depends on one reusable student profile for job eligibility, matching, or recruiter review
+* students fill the required details as part of the application flow for each job
 * students must enter the required information separately for every job application
-* the old student profile page is no longer part of the active student navigation flow
+* job applications are now the source of truth for skills, CGPA, education details, resume, and uploaded attachments
+* the old student profile endpoints remain only as legacy personal-account utilities and are not part of the active student navigation flow
 
 ---
 
@@ -218,6 +242,16 @@ Possible question types include:
 * yes or no
 * single choice
 * text input
+* URL input
+* file upload
+
+Important implementation rule:
+
+* comments, timeline, and interview actions are deferred from the v1 candidate review scope unless explicitly implemented in UI and backend together
+* the v1 candidate review modal is intentionally limited to:
+  * resume
+  * application form
+  * feedback
 * file upload
 * URL
 

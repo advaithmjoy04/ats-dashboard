@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react';
 import api from '../api/client';
 import { formatDate } from '../utils/formatters';
 
+function formatAnswerValue(value) {
+  if (Array.isArray(value)) {
+    return value.join(', ') || '--';
+  }
+  if (value === null || value === undefined || value === '') {
+    return '--';
+  }
+  return String(value);
+}
+
 function StudentApplicationsPage() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,8 +59,10 @@ function StudentApplicationsPage() {
         <div className="screen-center">Loading applications...</div>
       ) : applications.length ? (
         <section className="page-stack">
-          {applications.map((application) => (
-            <article className="panel" key={application._id}>
+          {applications.map((application) => {
+            const artifactMap = new Map((application.uploadedArtifacts || []).map((artifact) => [artifact.fieldKey, artifact]));
+            return (
+              <article className="panel" key={application._id}>
               <div className="panel-heading">
                 <div>
                   <h2>{application.jobId?.title || application.jobId?.role || '--'}</h2>
@@ -84,7 +96,13 @@ function StudentApplicationsPage() {
                       .map((field) => (
                         <div key={field.fieldKey}>
                           <strong>{field.label}</strong>
-                          <span>{String(field.value ?? '--')}</span>
+                          {field.type === 'FILE_UPLOAD' && artifactMap.get(field.fieldKey)?.url ? (
+                            <a href={artifactMap.get(field.fieldKey).url} target="_blank" rel="noreferrer">
+                              {artifactMap.get(field.fieldKey).originalName || 'View file'}
+                            </a>
+                          ) : (
+                            <span>{formatAnswerValue(field.value)}</span>
+                          )}
                         </div>
                       ))}
                   </div>
@@ -99,7 +117,14 @@ function StudentApplicationsPage() {
                   <ul className="review-list">
                     {application.screeningAnswers.map((answer) => (
                       <li key={answer.questionId}>
-                        <strong>{answer.question}:</strong> {String(answer.answer ?? '--')}
+                        <strong>{answer.question}:</strong>{' '}
+                        {answer.type === 'FILE_UPLOAD' && artifactMap.get(answer.questionId)?.url ? (
+                          <a href={artifactMap.get(answer.questionId).url} target="_blank" rel="noreferrer">
+                            {artifactMap.get(answer.questionId).originalName || 'View file'}
+                          </a>
+                        ) : (
+                          formatAnswerValue(answer.answer)
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -161,8 +186,9 @@ function StudentApplicationsPage() {
                   <div className="empty-state compact">No feedback has been shared for this application yet.</div>
                 )}
               </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </section>
       ) : (
         <div className="empty-state">You have not applied to any jobs yet.</div>

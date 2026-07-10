@@ -4,7 +4,7 @@ const { StudentProfile, Tenant, User } = require('../models');
 const AppError = require('../utils/AppError');
 const { hashToken } = require('./atsService');
 const { sendAccountInvitation } = require('./email.service');
-const { buildTenantAppOrigin, buildTenantAppUrl, getDefaultTenantId } = require('./tenantService');
+const { buildTenantAppOrigin, buildTenantAppUrl } = require('./tenantService');
 
 function normalizeInviteEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -15,13 +15,16 @@ function normalizeInviteName(fullName) {
 }
 
 async function createPendingInvitationUser({ email, fullName, role, profile, appOrigin, tenantId }) {
-  const effectiveTenantId = tenantId || (await getDefaultTenantId());
+  const effectiveTenantId = tenantId;
   const normalizedEmail = normalizeInviteEmail(email);
   const normalizedName = normalizeInviteName(fullName);
   const fallbackDisplayName = normalizedName || normalizedEmail;
 
   if (!normalizedEmail) {
     throw new AppError('Email is required', 400);
+  }
+  if (!effectiveTenantId) {
+    throw new AppError('Tenant context is required to create invited users', 403);
   }
 
   const plainToken = crypto.randomBytes(32).toString('hex');

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../api/client';
 import UserInvitePanel from '../components/UserInvitePanel';
 import UserListPanel from '../components/UserListPanel';
+import { emitActivityRefresh } from '../utils/activitySignals';
 
 const initialForm = {
   fullName: '',
@@ -56,6 +57,7 @@ function RecruitersPage() {
       setForm(initialForm);
       setInviteOpen(false);
       await loadRecruiters();
+      emitActivityRefresh({ scope: 'admin', action: 'recruiter.invited' });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to invite recruiter.');
     } finally {
@@ -85,6 +87,7 @@ function RecruitersPage() {
       await api.delete(`/admin/users/${userId}`, { data: { passwordConfirmation } });
       setMessage(`Deleted ${recruiter.email}`);
       await loadRecruiters();
+      emitActivityRefresh({ scope: 'admin', action: 'recruiter.deleted', userId });
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to remove recruiter invite.');
     } finally {

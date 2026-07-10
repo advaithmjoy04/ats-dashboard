@@ -23,8 +23,22 @@ router.patch(
   authenticateToken,
   requireRole('ADMIN'),
   body('name').optional().isString().trim().isLength({ min: 2, max: 120 }),
-  body('logoUrl').optional({ values: 'falsy' }).isURL(),
-  body('faviconUrl').optional({ values: 'falsy' }).isURL(),
+  body('logoUrl')
+    .optional({ values: 'falsy' })
+    .custom((value) => {
+      if (typeof value === 'string' && (value.startsWith('/') || require('validator').isURL(value))) {
+        return true;
+      }
+      throw new Error('Logo URL must be a valid URL or relative path');
+    }),
+  body('faviconUrl')
+    .optional({ values: 'falsy' })
+    .custom((value) => {
+      if (typeof value === 'string' && (value.startsWith('/') || require('validator').isURL(value))) {
+        return true;
+      }
+      throw new Error('Favicon URL must be a valid URL or relative path');
+    }),
   body('primaryColor').optional().matches(/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/),
   body('secondaryColor').optional().matches(/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/),
   body('supportEmail').optional({ values: 'falsy' }).isEmail(),

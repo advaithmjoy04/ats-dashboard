@@ -10,6 +10,39 @@ JWT authentication
 
 bcrypt password hashing
 
+Password rules for all newly set passwords:
+
+* minimum 8 characters
+* at least 1 uppercase letter
+* at least 1 lowercase letter
+* at least 1 number
+* at least 1 special character
+
+These rules are enforced on both the frontend and backend.
+
+Frontend responsibilities:
+
+* password visibility toggle
+* real-time rule feedback
+* confirm-password mismatch detection
+* disabled submit until valid
+
+Backend responsibilities:
+
+* centralized password rule validation
+* rejection of invalid passwords with clear messages
+* hashing with `bcrypt` before persistence
+
+Applied password flows:
+
+* login visibility toggle
+* account activation / first-password setup
+* reset password
+* forced password change
+* temporary password assignment in platform provisioning
+
+Passwords must never be stored, logged, or returned in plain text.
+
 ---
 
 # Login Protection

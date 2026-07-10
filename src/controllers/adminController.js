@@ -11,13 +11,17 @@ const {
   sanitizeRecruiterAssignments,
 } = require('../services');
 const { sendTestEmail } = require('../services');
-const { getDefaultTenantId } = require('../services/tenantService');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { getRequestOrigin } = require('../utils/requestOrigin');
 const { sendData, sendMessage } = require('../utils/response');
 const { verifyPasswordConfirmation } = require('../utils/passwordConfirmation');
+const { getRequestTenantId } = require('../utils/tenantScope');
 const config = require('../config');
+
+function buildOptionalTenantFilter(tenantId, extra = {}) {
+  return tenantId ? { ...extra, tenantId } : { ...extra };
+}
 
 const inviteStudent = catchAsync(async (req, res) => {
   const { email, fullName, usn, branch, semester, cgpa, phone, skills = [] } = req.body;
@@ -30,7 +34,7 @@ const inviteStudent = catchAsync(async (req, res) => {
     fullName,
     role: 'STUDENT',
     appOrigin,
-    tenantId: req.tenant?.id,
+    tenantId: getRequestTenantId(req, { allowPlatformSuperAdmin: false }),
     profile: {
       fullName,
       usn,
@@ -58,7 +62,13 @@ const inviteRecruiter = catchAsync(async (req, res) => {
     frontendOrigin: config.frontendOrigin,
     nodeEnv: config.nodeEnv,
   });
-  const { user } = await createPendingInvitationUser({ email, fullName, role: 'RECRUITER', appOrigin, tenantId: req.tenant?.id });
+  const { user } = await createPendingInvitationUser({
+    email,
+    fullName,
+    role: 'RECRUITER',
+    appOrigin,
+    tenantId: getRequestTenantId(req, { allowPlatformSuperAdmin: false }),
+  });
   await createAuditLog({
     req,
     action: 'tenant.recruiter.invite',
@@ -130,7 +140,7 @@ const deleteUserInvite = catchAsync(async (req, res, next) => {
 });
 
 const createJob = catchAsync(async (req, res) => {
-  const tenantId = req.tenant?.id || String(await getDefaultTenantId());
+  const tenantId = getRequestTenantId(req, { allowPlatformSuperAdmin: false });
   const assignedRecruiters = await sanitizeRecruiterAssignments(tenantId, req.body.assignedRecruiters);
   const jobData = normalizeJobPayload(req.body);
   if (jobData.publishState !== 'DRAFT' && !assignedRecruiters.length) {
@@ -163,10 +173,15 @@ const createJob = catchAsync(async (req, res) => {
 });
 
 const listJobs = catchAsync(async (req, res) => {
-  const result = await paginate(Job, { tenantId: req.user.tenantId }, {
+  const tenantId = getRequestTenantId(req);
+  const result = await paginate(Job, buildOptionalTenantFilter(tenantId), {
     page: req.query.page,
     limit: req.query.limit,
-    populate: { path: 'assignedRecruiters', select: 'email fullName status', match: { tenantId: req.user.tenantId } },
+    populate: {
+      path: 'assignedRecruiters',
+      select: 'email fullName status tenantId',
+      ...(tenantId ? { match: { tenantId } } : {}),
+    },
   });
   return sendData(res, 200, result);
 });
@@ -196,22 +211,28 @@ const deleteJob = catchAsync(async (req, res, next) => {
 });
 
 const getDashboard = catchAsync(async (req, res) => {
-  return sendData(res, 200, await getAdminDashboardSummary(req.user.tenantId));
+  return sendData(res, 200, await getAdminDashboardSummary(getRequestTenantId(req)));
 });
 
 const listRecruiters = catchAsync(async (req, res) => {
-  const result = await paginate(User, { tenantId: req.user.tenantId, role: 'RECRUITER', status: { $ne: 'INACTIVE' } }, { page: req.query.page, limit: req.query.limit });
+  const tenantId = getRequestTenantId(req);
+  const result = await paginate(
+    User,
+    buildOptionalTenantFilter(tenantId, { role: 'RECRUITER', status: { $ne: 'INACTIVE' } }),
+    { page: req.query.page, limit: req.query.limit }
+  );
   return sendData(res, 200, result);
 });
 
 const listStudents = catchAsync(async (req, res) => {
-  const result = await paginate(StudentProfile, { tenantId: req.user.tenantId }, {
+  const tenantId = getRequestTenantId(req);
+  const result = await paginate(StudentProfile, buildOptionalTenantFilter(tenantId), {
     page: req.query.page,
     limit: req.query.limit,
     populate: {
       path: 'userId',
       select: 'email fullName role status createdAt',
-      match: { tenantId: req.user.tenantId, status: { $ne: 'INACTIVE' } },
+      match: buildOptionalTenantFilter(tenantId, { status: { $ne: 'INACTIVE' } }),
     },
   });
   return sendData(res, 200, {
@@ -221,11 +242,12 @@ const listStudents = catchAsync(async (req, res) => {
 });
 
 const listCandidates = catchAsync(async (req, res) => {
-  return sendData(res, 200, await listAdminCandidates({ ...req.query, tenantId: req.user.tenantId }));
+  return sendData(res, 200, await listAdminCandidates({ ...req.query, tenantId: getRequestTenantId(req) }));
 });
 
 const updateCandidateFeedback = catchAsync(async (req, res, next) => {
-  const application = await Application.findOne({ _id: req.params.id, tenantId: req.user.tenantId });
+  const tenantId = getRequestTenantId(req);
+  const application = await Application.findOne(buildOptionalTenantFilter(tenantId, { _id: req.params.id }));
   if (!application) return next(new AppError('Application not found', 404));
 
   application.feedback = {

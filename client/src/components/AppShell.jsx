@@ -1,9 +1,10 @@
 import { Bell, BriefcaseBusiness, FileSearch, GraduationCap, LayoutDashboard, LogOut, ShieldUser, Users } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../state/AuthContext';
 import { useTenant } from '../state/TenantContext';
+import { ATS_ACTIVITY_REFRESH_EVENT } from '../utils/activitySignals';
 import { formatDate, getInitials } from '../utils/formatters';
 
 function buildAdminNotifications(jobs, candidates) {
@@ -138,10 +139,19 @@ function buildRecruiterNotifications(jobs, candidates) {
   return notifications;
 }
 
+function startCase(value) {
+  return String(value || '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 function AppShell({ navItems, sectionLabel = 'Menu' }) {
   const { user, logout } = useAuth();
   const { tenant } = useTenant();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notificationsState, setNotificationsState] = useState({
@@ -152,6 +162,14 @@ function AppShell({ navItems, sectionLabel = 'Menu' }) {
   const location = useLocation();
   const panelRef = useRef(null);
   const isPlatform = user?.role === 'PLATFORM_SUPER_ADMIN';
+  const activeNavItem = useMemo(
+    () =>
+      navItems
+        .slice()
+        .sort((left, right) => right.to.length - left.to.length)
+        .find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)),
+    [location.pathname, navItems]
+  );
 
   const greetingName = useMemo(() => {
     if (user?.fullName) {
@@ -159,6 +177,33 @@ function AppShell({ navItems, sectionLabel = 'Menu' }) {
     }
     return user?.email?.split('@')[0] || 'Admin';
   }, [user]);
+
+  const currentViewLabel = useMemo(() => {
+    if (isPlatform) {
+      return 'Platform';
+    }
+    return activeNavItem?.label || startCase(location.pathname.split('/').filter(Boolean).slice(-1)[0] || sectionLabel);
+  }, [activeNavItem?.label, isPlatform, sectionLabel]);
+
+  const showSearch = useMemo(() => {
+    if (isPlatform) {
+      return false;
+    }
+    if (user?.role === 'STUDENT') {
+      return location.pathname.startsWith('/student/jobs');
+    }
+    return true;
+  }, [isPlatform, location.pathname, user?.role]);
+
+  const searchPlaceholder = useMemo(() => {
+    if (user?.role === 'STUDENT') {
+      return 'Search job postings, company, role, or job ID...';
+    }
+    if (user?.role === 'RECRUITER') {
+      return 'Search jobs, candidates, skills, company...';
+    }
+    return 'Search jobs, candidates, USN, company...';
+  }, [user?.role]);
 
   useEffect(() => {
     function handleDocumentClick(event) {
@@ -172,77 +217,119 @@ function AppShell({ navItems, sectionLabel = 'Menu' }) {
     return () => document.removeEventListener('mousedown', handleDocumentClick);
   }, []);
 
-  useEffect(() => {
-    let ignore = false;
-
-    async function loadNotifications() {
-      if (!user?.role) {
-        setNotificationsState({ items: [], loading: false, error: '' });
-        return;
-      }
-
-      setNotificationsState((current) => ({ ...current, loading: true, error: '' }));
-
-      try {
-        let items = [];
-
-        if (user.role === 'PLATFORM_SUPER_ADMIN') {
-          const tenantsRes = await api.get('/platform/tenants');
-          items = buildPlatformNotifications(tenantsRes.data || []);
-        } else if (user.role === 'ADMIN') {
-          const [jobsRes, candidatesRes] = await Promise.all([
-            api.get('/admin/jobs', { params: { limit: 6 } }),
-            api.get('/admin/candidates', { params: { limit: 10 } }),
-          ]);
-          items = buildAdminNotifications(jobsRes.data.items || [], candidatesRes.data.items || []);
-        } else if (user.role === 'STUDENT') {
-          const [jobsRes, applicationsRes] = await Promise.all([
-            api.get('/students/jobs', { params: { limit: 10 } }),
-            api.get('/students/applications/my', { params: { limit: 10 } }),
-          ]);
-          const applications = applicationsRes.data.items || [];
-          const appliedJobIds = new Set(applications.map((application) => application.jobId?.jobId).filter(Boolean));
-          const jobs = (jobsRes.data.items || []).map((job) => ({
-            ...job,
-            applied: appliedJobIds.has(job.jobId),
-          }));
-          items = buildStudentNotifications(jobs, applications);
-        } else if (user.role === 'RECRUITER') {
-          const jobsRes = await api.get('/recruiters/jobs', { params: { limit: 10 } });
-          const jobs = jobsRes.data.items || [];
-          let candidates = [];
-          if (jobs[0]?.jobId) {
-            const candidatesRes = await api.get(`/recruiters/jobs/${jobs[0].jobId}/applicants`, {
-              params: { limit: 10 },
-            });
-            candidates = candidatesRes.data.items || [];
-          }
-          items = buildRecruiterNotifications(jobs, candidates);
-        }
-
-        if (!ignore) {
-          setNotificationsState({
-            items,
-            loading: false,
-            error: '',
-          });
-        }
-      } catch (error) {
-        if (!ignore) {
-          setNotificationsState({
-            items: [],
-            loading: false,
-            error: 'Unable to load notifications right now.',
-          });
-        }
-      }
+  const loadNotifications = useCallback(async () => {
+    if (!user?.role) {
+      setNotificationsState({ items: [], loading: false, error: '' });
+      return;
     }
 
-    loadNotifications();
-    return () => {
-      ignore = true;
-    };
+    setNotificationsState((current) => ({ ...current, loading: true, error: '' }));
+
+    try {
+      let items = [];
+
+      if (user.role === 'PLATFORM_SUPER_ADMIN') {
+        const tenantsRes = await api.get('/platform/tenants');
+        items = buildPlatformNotifications(tenantsRes.data || []);
+      } else if (user.role === 'ADMIN') {
+        const [jobsRes, candidatesRes] = await Promise.all([
+          api.get('/admin/jobs', { params: { limit: 6 } }),
+          api.get('/admin/candidates', { params: { limit: 10 } }),
+        ]);
+        items = buildAdminNotifications(jobsRes.data.items || [], candidatesRes.data.items || []);
+      } else if (user.role === 'STUDENT') {
+        const [jobsRes, applicationsRes] = await Promise.all([
+          api.get('/students/jobs', { params: { limit: 10 } }),
+          api.get('/students/applications/my', { params: { limit: 10 } }),
+        ]);
+        const applications = applicationsRes.data.items || [];
+        const appliedJobIds = new Set(applications.map((application) => application.jobId?.jobId).filter(Boolean));
+        const jobs = (jobsRes.data.items || []).map((job) => ({
+          ...job,
+          applied: appliedJobIds.has(job.jobId),
+        }));
+        items = buildStudentNotifications(jobs, applications);
+      } else if (user.role === 'RECRUITER') {
+        const jobsRes = await api.get('/recruiters/jobs', { params: { limit: 10 } });
+        const jobs = jobsRes.data.items || [];
+        let candidates = [];
+        if (jobs[0]?.jobId) {
+          const candidatesRes = await api.get(`/recruiters/jobs/${jobs[0].jobId}/applicants`, {
+            params: { limit: 10 },
+          });
+          candidates = candidatesRes.data.items || [];
+        }
+        items = buildRecruiterNotifications(jobs, candidates);
+      }
+
+      items = items
+        .slice()
+        .sort((left, right) => new Date(right.timestamp || 0) - new Date(left.timestamp || 0));
+
+      setNotificationsState({
+        items,
+        loading: false,
+        error: '',
+      });
+    } catch (error) {
+      setNotificationsState({
+        items: [],
+        loading: false,
+        error: 'Unable to load notifications right now.',
+      });
+    }
   }, [user?.role]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function syncNotifications() {
+      if (!active) {
+        return;
+      }
+      await loadNotifications();
+    }
+
+    syncNotifications();
+    const interval = window.setInterval(syncNotifications, 30000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [loadNotifications, location.pathname]);
+
+  useEffect(() => {
+    function handleActivityRefresh() {
+      loadNotifications();
+    }
+
+    function handleFocus() {
+      loadNotifications();
+    }
+
+    window.addEventListener(ATS_ACTIVITY_REFRESH_EVENT, handleActivityRefresh);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.removeEventListener(ATS_ACTIVITY_REFRESH_EVENT, handleActivityRefresh);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
+  useEffect(() => {
+    if (!showSearch && search) {
+      setSearch('');
+    }
+  }, [search, showSearch]);
 
   const unreadCount = notificationsState.items.length;
 
@@ -260,7 +347,23 @@ function AppShell({ navItems, sectionLabel = 'Menu' }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div>
-          <div className="brand-mark">{tenant.logoUrl ? <img src={tenant.logoUrl} alt={tenant.name} className="brand-logo" /> : tenant.name}</div>
+          <div className="brand-mark">
+            {tenant.logoUrl ? (
+              <img src={tenant.logoUrl} alt={tenant.name} className="brand-logo" />
+            ) : tenant.slug === 'default-institute' || isPlatform ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg viewBox="0 0 220 230" width="28" height="29" style={{ flexShrink: 0 }}>
+                  <path d="M86 56 C 132 50 168 84 168 128 C 168 166 140 192 102 190 C 64 188 40 158 44 118 C 47 84 60 60 86 56 Z" fill="#F9930C" />
+                  <path d="M92 56 C 90 44 92 34 100 28" stroke="#C2620E" stroke-width="8" stroke-linecap="round" fill="none" />
+                  <path d="M92 56 C 96 34 84 16 60 14 C 64 36 76 50 92 56 Z" fill="#1EA45C" />
+                  <ellipse cx="120" cy="98" rx="9" ry="16" fill="#FFC24B" transform="rotate(-28 120 98)" />
+                </svg>
+                <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', textTransform: 'none' }}>MNGO</span>
+              </div>
+            ) : (
+              tenant.name
+            )}
+          </div>
           <div className="nav-label">{sectionLabel}</div>
           <nav className="sidebar-nav">
             {navItems.map((item) => {
@@ -328,20 +431,11 @@ function AppShell({ navItems, sectionLabel = 'Menu' }) {
                 <div>
                   <div className="eyebrow">Hello,</div>
                   <h1>{greetingName}</h1>
-                  {user?.role !== 'RECRUITER' ? (
-                    <p>{location.pathname.replace('/admin/', '').replace('/', ' / ')}</p>
-                  ) : null}
+                  <p>{currentViewLabel}</p>
                 </div>
               </div>
 
-              <div className="topbar-search">
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search jobs, candidates, USN, company..."
-                />
-              </div>
+
 
               <div className="topbar-actions">
                 <button
@@ -418,7 +512,7 @@ function AppShell({ navItems, sectionLabel = 'Menu' }) {
         </header>
 
         <main className="page-content">
-          <Outlet context={{ search }} />
+          <Outlet context={{ search, setSearch, debouncedSearch, refreshNotifications: loadNotifications }} />
         </main>
       </div>
 
