@@ -115,7 +115,8 @@ async function replaceTenantAsset({ tenant, file, assetType }) {
       contentType: file.mimetype,
     });
   } catch (error) {
-    throw new AppError('Unable to upload file to AWS S3. Please verify your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_S3_BUCKET settings.', 500);
+    const detail = error?.message || 'Unknown S3 error';
+    throw new AppError(`Unable to upload file to AWS S3 (${detail}). Please verify your AWS bucket, region, and IAM keys.`, 500);
   }
 
   tenant[keyField] = nextKey;
