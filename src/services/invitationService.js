@@ -48,9 +48,9 @@ async function createPendingInvitationUser({ email, fullName, role, profile, app
     user.password = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
     await user.save();
   } else {
-    const foreignTenantUser = await User.findOne({ email: normalizedEmail }).lean();
-    if (foreignTenantUser) {
-      throw new AppError('A user with this email already exists in another workspace', 409);
+    const superAdminConflict = await User.findOne({ email: normalizedEmail, role: 'PLATFORM_SUPER_ADMIN' }).lean();
+    if (superAdminConflict) {
+      throw new AppError('This email belongs to a platform super admin account', 409);
     }
 
     user = await User.create({
