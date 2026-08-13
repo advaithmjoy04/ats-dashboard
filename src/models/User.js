@@ -18,7 +18,6 @@ const userSchema = new Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
       trim: true,
       index: true,
@@ -57,7 +56,25 @@ userSchema.pre('save', function normalizeOptionalUsername(next) {
 
 userSchema.index({ role: 1 });
 userSchema.index({ status: 1 });
-userSchema.index({ tenantId: 1, email: 1 });
+userSchema.index(
+  { tenantId: 1, email: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      tenantId: { $exists: true },
+    },
+  }
+);
+userSchema.index(
+  { email: 1 },
+  {
+    name: 'platform_super_admin_email_unique',
+    unique: true,
+    partialFilterExpression: {
+      role: 'PLATFORM_SUPER_ADMIN',
+    },
+  }
+);
 userSchema.index(
   { tenantId: 1, username: 1 },
   {
