@@ -108,11 +108,15 @@ async function replaceTenantAsset({ tenant, file, assetType }) {
   const previousKey = tenant[keyField];
   const nextKey = buildTenantAssetKey(tenant._id, assetType, file.originalname);
 
-  await uploadBuffer({
-    key: nextKey,
-    body: file.buffer,
-    contentType: file.mimetype,
-  });
+  try {
+    await uploadBuffer({
+      key: nextKey,
+      body: file.buffer,
+      contentType: file.mimetype,
+    });
+  } catch (error) {
+    throw new AppError('Unable to upload file to AWS S3. Please verify your AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_S3_BUCKET settings.', 500);
+  }
 
   tenant[keyField] = nextKey;
   tenant[urlField] = '';
