@@ -2,7 +2,7 @@ const AppError = require('../utils/AppError');
 
 module.exports = (err, req, res, next) => {
   let statusCode = err.statusCode || 500;
-  let message = err.isOperational ? err.message : 'Internal Server Error';
+  let message = err.message || (err.isOperational ? err.message : 'Internal Server Error');
 
   if (err.name === 'TokenExpiredError' || err.name === 'JsonWebTokenError') {
     statusCode = 401;
