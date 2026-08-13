@@ -77,9 +77,9 @@ async function createTenantAdminAccount({
     nodeEnv: config.nodeEnv,
   });
 
-  const emailConflict = await User.findOne({ email: normalizedEmail }).lean();
+  const emailConflict = await User.findOne({ tenantId: tenant._id, email: normalizedEmail }).lean();
   if (emailConflict) {
-    throw new AppError('Admin email already exists', 409);
+    throw new AppError('Admin email already exists in this institute', 409);
   }
 
   if (normalizedUsername) {
@@ -178,9 +178,9 @@ const createTenant = catchAsync(async (req, res) => {
 
   await ensureUniqueTenantFields({ slug, subdomain, customDomain });
 
-  const existingAdmin = await User.findOne({ email: normalizedEmail }).lean();
-  if (existingAdmin) {
-    throw new AppError('This first admin email is already used by another platform account', 409);
+  const existingSuperAdmin = await User.findOne({ email: normalizedEmail, role: 'PLATFORM_SUPER_ADMIN' }).lean();
+  if (existingSuperAdmin) {
+    throw new AppError('This email belongs to a platform super admin account', 409);
   }
   if (adminUsername) {
     const usernameConflict = await User.findOne({ username: adminUsername }).lean();
