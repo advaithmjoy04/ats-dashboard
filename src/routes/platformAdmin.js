@@ -39,7 +39,7 @@ router.get('/tenants/:id/admins', listTenantAdmins);
 router.post(
   '/tenants',
   body('name').isString().trim().isLength({ min: 2, max: 120 }),
-  body('slug').optional().isString().trim().isLength({ min: 2, max: 120 }),
+  body('slug').optional({ values: 'falsy' }).isString().trim().isLength({ min: 2, max: 120 }),
   body('subdomain').optional({ values: 'falsy' }).isString().trim().isLength({ min: 2, max: 120 }),
   body('customDomain').optional({ values: 'falsy' }).isString().trim().isLength({ min: 3, max: 255 }),
   body('allowedOrigins').optional().isArray(),
